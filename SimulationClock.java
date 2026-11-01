@@ -1,8 +1,8 @@
-public class Clock {
+public class SimulationClock {
     private int hours;
     private int minutes;
 
-    public Clock(int hours, int minutes) {
+    public SimulationClock(int hours, int minutes) {
         this.hours = hours;
         this.minutes = minutes;
     }
