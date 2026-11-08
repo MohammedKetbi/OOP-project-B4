@@ -1,4 +1,5 @@
 
+
 package model;
 
 // Student inherits from the abstract User class
@@ -66,5 +67,6 @@ public class Student extends User {
     // Returns the student's GPU time allowance
     public TimeAllowance getAllowance() {
         return allowance;
-    }
-}
+    }}
+
+
