@@ -142,6 +142,7 @@ public class Job {
     }
 
     public void checkTime(LocalDateTime time, LocalDateTime earliestTime) {
+        if (earliestTime == null) earliestTime = submissionTime;
         if (time == null || time.isBefore(earliestTime)) throw new IllegalArgumentException("Time is missing or before the recorded event");
 
     }
