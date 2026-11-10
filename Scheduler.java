@@ -9,27 +9,24 @@ import model.User;
 
 public class Scheduler {
 
-    // Jobs currently waiting for a GPU.
+    // Contains only jobs waiting for a GPU.
     private final List<Job> queue = new ArrayList<>();
 
-    // All accepted jobs, including completed and cancelled jobs.
+    // Keeps every accepted job, including completed and cancelled jobs.
     private final List<Job> allJobs = new ArrayList<>();
 
-    // ADDED: Job stores a student ID, not a Student object.
-    // This map lets us find the student's existing allowance.
+    // Connects each student ID to the existing Student object.
+    // Job stores a student ID, so this lets us find their allowance.
     private final Map<String, Student> students = new HashMap<>();
 
     private final GPU[] gpus;
     private final SimulationClock simClock;
 
-    // ADDED: needed to calculate elapsed time for utilization.
+    // Starting time for calculating utilization during this session.
     private final LocalDateTime initialTime;
 
-    // ADMINISTRATOR NOTE:
-    // We use User so this class does not depend on the unfinished
-    // Administrator class. Admin cancellation stays disabled until
-    // trusted application setup registers the real administrator.
-    private User administrator;
+    // The completed Administrator registers itself in its constructor.
+    private Administrator administrator;
 
     public Scheduler(SimulationClock simClock, GPU[] gpus) {
 
@@ -45,6 +42,7 @@ public class Scheduler {
             );
         }
 
+        // Check that all GPUs exist, are free, and have different IDs.
         Set<Integer> ids = new HashSet<>();
 
         for (GPU gpu : gpus) {
@@ -61,19 +59,18 @@ public class Scheduler {
         this.simClock = simClock;
         this.initialTime = simClock.getTime();
 
-        // Copy the array so changing the original array does not
-        // replace the scheduler's GPUs.
+        // Copy the array while keeping the same GPU objects.
         this.gpus = gpus.clone();
 
-        // Free GPUs must receive jobs in increasing GPU ID order.
+        // Jobs must be assigned to free GPUs in increasing ID order.
         Arrays.sort(
             this.gpus,
             Comparator.comparingInt(GPU::getId)
         );
     }
 
-    // ADDED: call this for each approved student before submission.
-    // Approval itself belongs in account management.
+    // Administrator.approve() automatically calls this method.
+    // Store the same Student object so its allowance is shared.
     public void registerStudent(Student student) {
 
         if (student == null ||
@@ -87,6 +84,8 @@ public class Scheduler {
 
         Student existing = students.get(student.getStudentId());
 
+        // Registering the same object again is harmless.
+        // A different object with the same ID is rejected.
         if (existing != null && existing != student) {
             throw new IllegalArgumentException(
                 "Student ID is already registered."
@@ -96,14 +95,13 @@ public class Scheduler {
         students.put(student.getStudentId(), student);
     }
 
-    // ADMINISTRATOR NOTE:
-    // Call this from trusted application setup once the real
-    // Administrator class extends model.User.
-    // Do not accept an arbitrary administrator object from student input.
-    public void registerAdministrator(User admin) {
+    // Administrator's constructor calls:
+    // scheduler.registerAdministrator(this);
+    //
+    // Create the Scheduler first, then the Administrator.
+    public void registerAdministrator(Administrator admin) {
 
         if (admin == null ||
-            admin instanceof Student ||
             !"admin".equals(admin.getUsername())) {
 
             throw new IllegalArgumentException(
@@ -111,6 +109,7 @@ public class Scheduler {
             );
         }
 
+        // Prevent replacing the registered administrator account.
         if (administrator != null && administrator != admin) {
             throw new IllegalStateException(
                 "Administrator is already registered."
@@ -131,7 +130,7 @@ public class Scheduler {
             );
         }
 
-        // Reject duplicate IDs, even if the objects are different.
+        // Different Job objects must not share the same ID.
         for (Job existing : allJobs) {
             if (existing.getJobId().equals(job.getJobId())) {
                 throw new IllegalArgumentException(
@@ -140,6 +139,8 @@ public class Scheduler {
             }
         }
 
+        // Your Job constructor creates jobs with status "Queued".
+        // Reject jobs that have already started or ended.
         if (!"Queued".equals(job.getStatus()) ||
             job.getStartTime() != null ||
             job.getFinishTime() != null ||
@@ -151,8 +152,8 @@ public class Scheduler {
             );
         }
 
-        // Your Job constructor sets submissionTime.
-        // Create the job using simClock.getTime().
+        // Job has no submission-time setter.
+        // Its constructor must receive simClock.getTime().
         if (!simClock.getTime().equals(job.getSubmissionTime())) {
             throw new IllegalArgumentException(
                 "Create the job using the current simulation time."
@@ -161,14 +162,16 @@ public class Scheduler {
 
         TimeAllowance allowance = ownerOf(job).getAllowance();
 
-        // Your reserve() method already checks available minutes.
-        // An exact match is allowed.
+        // reserve() checks that enough minutes are available.
+        // A job using exactly the available balance is accepted.
         allowance.reserve(job.getEstimatedDuration());
 
         queue.add(job);
         allJobs.add(job);
 
         sortQueue();
+
+        // Start immediately if a GPU is free.
         startWaitingJobs();
     }
 
@@ -176,8 +179,8 @@ public class Scheduler {
 
         simClock.advance();
 
-        // Your Job class calculates runtime from timestamps.
-        // It does not need a separate advanceMinute() method.
+        // Job calculates runtime from the clock and its timestamps.
+        // Queued jobs do not consume GPU minutes.
         for (GPU gpu : gpus) {
 
             if (!gpu.isFree()) {
@@ -192,25 +195,24 @@ public class Scheduler {
             }
         }
 
-        // Start waiting jobs after processing all running jobs.
-        // Newly started jobs have zero elapsed runtime at this moment.
+        // Process all running jobs before starting waiting jobs.
+        // Newly started jobs begin with zero elapsed runtime.
         startWaitingJobs();
     }
 
-    // ADDED: handles completion and allowance settlement together.
     private void completeJob(Job job, GPU gpu) {
 
         job.complete(simClock.getTime());
 
-        // Your settle() method releases the full reservation
-        // and charges actual runtime in one operation.
+        // Release the full reservation and charge the completed runtime.
+        // Only jobs on busy GPUs reach this method, so completed jobs
+        // are not charged again on later clock advances.
         ownerOf(job).getAllowance().settle(
             job.getEstimatedDuration(),
             job.getChargeableMinutes()
         );
 
-        // Your GPU requires the job to be completed or cancelled
-        // before release() can be called.
+        // GPU.release() requires a completed or cancelled job.
         gpu.release();
     }
 
@@ -229,9 +231,11 @@ public class Scheduler {
 
         Student owner = ownerOf(job);
 
-        // The caller must pass the actual registered account object.
+        // Pass the actual Student object created during approval.
         boolean isOwner = by == owner;
 
+        // Administrator.cancelJob() passes its own object here.
+        // Compare with the registered account, not just a username.
         boolean isAdmin =
             administrator != null && by == administrator;
 
@@ -241,6 +245,7 @@ public class Scheduler {
             );
         }
 
+        // Completed and cancelled jobs cannot be cancelled again.
         if (!"Queued".equals(job.getStatus()) &&
             !"Running".equals(job.getStatus())) {
 
@@ -251,7 +256,7 @@ public class Scheduler {
 
         GPU assignedGpu = null;
 
-        // Find the assigned GPU before changing the job status.
+        // Find the GPU before changing the job's status.
         if ("Running".equals(job.getStatus())) {
 
             for (GPU gpu : gpus) {
@@ -268,10 +273,9 @@ public class Scheduler {
             }
         }
 
-        // Your Job.cancel() records the user, reason, cancellation
-        // time, and finish time when cancelled while running.
-        //
-        // REQUIRED: apply the Job.checkTime() null fix shown above.
+        // Job records cancellation time, user and reason.
+        // Your updated Job.checkTime() handles queued jobs,
+        // which have no start time.
         job.cancel(
             simClock.getTime(),
             by.getUsername(),
@@ -279,7 +283,8 @@ public class Scheduler {
         );
 
         // Queued cancellation charges zero.
-        // Running cancellation charges elapsed execution time.
+        // Running cancellation charges only elapsed runtime.
+        // settle() also releases the full reservation.
         owner.getAllowance().settle(
             job.getEstimatedDuration(),
             job.getChargeableMinutes()
@@ -291,13 +296,14 @@ public class Scheduler {
             assignedGpu.release();
         }
 
+        // The cancelled job stays in allJobs for history.
         startWaitingJobs();
     }
 
-    // ADDED: shared dispatch logic.
+    // Shared by submit(), advanceMinute() and cancel().
     private void startWaitingJobs() {
 
-        // The constructor sorts GPUs by ID.
+        // GPUs are already sorted by ID in the constructor.
         for (GPU gpu : gpus) {
 
             if (queue.isEmpty()) {
@@ -309,7 +315,7 @@ public class Scheduler {
                 Job next = queue.get(0);
 
                 // Your GPU.assign() already calls Job.start().
-                // Calling start() separately would start the job twice.
+                // Do not call start() separately.
                 gpu.assign(next, simClock.getTime());
 
                 queue.remove(0);
@@ -317,10 +323,10 @@ public class Scheduler {
         }
     }
 
-    // ADDED: submission time first, then numeric job ID.
     private void sortQueue() {
 
-        // Numeric comparison ensures J99 comes before J100.
+        // Order by submission time, then the numeric part of the ID.
+        // Numeric comparison puts J99 before J100.
         queue.sort(
             Comparator.comparing(Job::getSubmissionTime)
                 .thenComparing(
@@ -332,7 +338,7 @@ public class Scheduler {
         );
     }
 
-    // ADDED: finds the Student associated with a Job's student ID.
+    // Find the registered Student using the ID stored in Job.
     private Student ownerOf(Job job) {
 
         Student student = students.get(job.getStudentId());
@@ -346,7 +352,6 @@ public class Scheduler {
         return student;
     }
 
-    // ADDED: prevents cancellation or queries for unknown jobs.
     private void requireKnownJob(Job job) {
 
         if (job == null || !allJobs.contains(job)) {
@@ -356,11 +361,12 @@ public class Scheduler {
         }
     }
 
-    // ADDED: predicts times without changing live GPU assignments.
-    // Each array contains:
-    // index 0 = predicted start, index 1 = predicted finish.
+    // Predict start and finish times without assigning real GPUs.
+    // Each result array contains:
+    // [0] = predicted start
+    // [1] = predicted finish
     //
-    // Recalculate whenever the screen needs current predictions.
+    // Calling this again recalculates predictions from current state.
     public Map<Job, LocalDateTime[]> predictSchedule() {
 
         LocalDateTime[] available =
@@ -371,10 +377,11 @@ public class Scheduler {
 
         LocalDateTime now = simClock.getTime();
 
-        // Copy availability times from the live GPUs.
+        // Copy each GPU's availability time.
         for (int i = 0; i < gpus.length; i++) {
 
             Job running = gpus[i].getCurrentJob();
+
             available[i] = now;
 
             if (running != null) {
@@ -389,20 +396,22 @@ public class Scheduler {
                 result.put(
                     running,
                     new LocalDateTime[]{
-                        running.getStartTime(), finish
+                        running.getStartTime(),
+                        finish
                     }
                 );
             }
         }
 
-        // Schedule waiting jobs on the copied availability times.
+        // Predict queued jobs in their current FCFS order.
         for (Job job : queue) {
 
             int earliest = 0;
 
             for (int i = 1; i < available.length; i++) {
 
-                // Equal times keep the lower GPU ID.
+                // Equal times retain the lower GPU ID because
+                // the GPU array is sorted in increasing ID order.
                 if (available[i].isBefore(available[earliest])) {
                     earliest = i;
                 }
@@ -418,6 +427,7 @@ public class Scheduler {
                 new LocalDateTime[]{start, finish}
             );
 
+            // Update only the copied availability time.
             available[earliest] = finish;
         }
 
@@ -442,7 +452,7 @@ public class Scheduler {
     }
 
     // Queue positions start at 1.
-    // Returns 0 when the job is not waiting.
+    // Zero means the job is not waiting.
     public int getQueuePosition(Job job) {
 
         requireKnownJob(job);
@@ -457,7 +467,7 @@ public class Scheduler {
             simClock.getTime()
         ).toMinutes();
 
-        // Empty means the GUI should display N/A.
+        // Empty means the interface should display N/A.
         if (elapsed == 0) {
             return OptionalDouble.empty();
         }
@@ -466,7 +476,8 @@ public class Scheduler {
 
         for (Job job : allJobs) {
 
-            // Queued jobs have no execution time.
+            // Include running, completed and running-cancelled time.
+            // Exclude waiting time.
             if (job.getStartTime() != null) {
                 busyMinutes += job.getElapsedRuntime(
                     simClock.getTime()
@@ -481,8 +492,9 @@ public class Scheduler {
         return OptionalDouble.of(utilization);
     }
 
-    // Return read-only copies of the lists so outside code cannot
-    // add or remove jobs directly.
+    // Read-only list copies prevent outside code from adding
+    // or removing jobs directly from the scheduler's collections.
+    // The Job objects themselves are still shared.
     public List<Job> getQueue() {
 
         return Collections.unmodifiableList(
