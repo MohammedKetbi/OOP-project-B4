@@ -201,7 +201,7 @@ public class Job {
 
     @Override 
     public String toString(){
-        return "Job ID: " + jobId + ", Student ID: " + studentId + ", Title: " + title +  ", Application: " + applicationName + ", Application " + applicationName +
+        return "Job ID: " + jobId + ", Student ID: " + studentId + ", Title: " + title +  ", Application: " + applicationName  +
         ", Description: " + description + ", Task size: " + taskSize + ", Workload units: " + workloadUnits + ", Duration: " + estimatedDuration + " minutes" + ", Status: " + status +
         ", GPU ID: " + assignedGpuId + ", Submitted: " + formatTime(submissionTime) + ", Started: " + formatTime(startTime) + ", Finished: " + formatTime(finishTime) + ", Cancelled: " + formatTime(cancellationTime) + 
         ", Cancelled by:" + cancelledBy + ", Cancellation reason: " + cancelledReason;
