@@ -1,3 +1,4 @@
+package model;
 
 
 import java.time.LocalDateTime;
@@ -5,8 +6,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import model.Student;
-import model.User;
+
+import logic.Scheduler;
+import logic.SimulationClock;
 public class Administrator extends User {
 
 private final Scheduler scheduler;

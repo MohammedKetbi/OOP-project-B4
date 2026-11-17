@@ -1,3 +1,4 @@
+package model;
 public class AccessRequest {
     // Store the request details
     private int id;

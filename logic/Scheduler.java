@@ -1,8 +1,12 @@
+package logic;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import model.Administrator;
+import model.GPU;
+import model.Job;
 import model.Student;
 import model.TimeAllowance;
 import model.User;
