@@ -97,9 +97,8 @@ public class Job {
         }
 
     public int getElapsedRuntime(LocalDateTime currenTime){
-        checkTime(currenTime, startTime);
         if (startTime == null) return 0;
-        checkTime(currenTime, submissionTime);
+        checkTime(currenTime, startTime);
         LocalDateTime endTime = currenTime;
         if (finishTime != null) {
             checkTime(currenTime, finishTime);
@@ -148,7 +147,7 @@ public class Job {
     }
     public String formatTime(LocalDateTime time){
         if (time == null) return "Not set";
-       DateTimeFormatter format =  DateTimeFormatter.ofPattern("dd//MM//yyyy HH:mm");
+       DateTimeFormatter format =  DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         return time.format(format);
     }
     public String getJobId() {
