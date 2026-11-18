@@ -1,5 +1,5 @@
 
-package ui;
+package UI;
 
 import model.Student;
 import model.TimeAllowance;

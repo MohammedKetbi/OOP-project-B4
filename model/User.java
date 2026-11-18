@@ -15,4 +15,9 @@ public abstract class User { //abstract parent class for user and adminstration
    return this.password.equals(password);
    }
 
+
+    // STORAGE: saved accounts need their original password on reload.
+    // Do not display this value in dashboards or logs.
+    public String getPasswordForStorage() { return password; }
+
 }
