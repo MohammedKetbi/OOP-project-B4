@@ -42,6 +42,7 @@ throw new IllegalArgumentException("Initial GPU minutes must be positive.");
 Student student = new Student( String.valueOf(request.getId()),
 password, request.getName(), request.getEmail(), request.getPhone(), allocatedMinutes);
 scheduler.registerStudent(student);
+request.rememberPassword(password);
 request.approve();
 return student;
   }
@@ -71,6 +72,7 @@ String record = "Student: " + student.getStudentId() + ", Minutes: " + minutes+ 
 + ", Time: " + time.format(format) + ",Reason" + reason.trim();
 student.getAllowance().grantTime(minutes);
 grantHistory.add(record);
+grantRecords.add(new TimeGrant(student.getStudentId(), minutes, getUsername(), time, reason.trim()));
 }
 public void cancelJob(Job job, String reason) {
         scheduler.cancel(job, this, reason);
@@ -87,4 +89,20 @@ if (!"Pending".equals(request.getStatus())) {
 throw new IllegalStateException("This request has already been processed.");
 }
 }
+
+    // STORAGE: structured records avoid trying to parse display strings.
+    private final List<TimeGrant> grantRecords = new ArrayList<>();
+    public List<TimeGrant> getGrantRecords() {
+        return Collections.unmodifiableList(new ArrayList<>(grantRecords));
+    }
+    public void restoreGrantHistory(List<TimeGrant> records) {
+        if (!grantRecords.isEmpty() || !grantHistory.isEmpty()) {
+            throw new IllegalStateException("Grant history already exists.");
+        }
+        for (TimeGrant record : records) {
+            grantRecords.add(record);
+            grantHistory.add(record.toString());
+        }
+    }
+
 }

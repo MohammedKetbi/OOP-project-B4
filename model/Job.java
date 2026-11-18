@@ -210,4 +210,24 @@ public class Job {
     }
         
 
+
+    // STORAGE: rebuild saved fields without start(), complete() or cancel().
+    // Scheduler.restore() validates timeline, ownership, balances and assignments.
+    public static Job restore(String jobId, String studentId, String title,
+            String applicationName, String description, String taskSize,
+            LocalDateTime submitted, String status, int gpuId,
+            LocalDateTime started, LocalDateTime finished,
+            LocalDateTime cancelled, String by, String reason) {
+        Job job = new Job(jobId, studentId, title, applicationName, description,
+                          taskSize, submitted);
+        job.status = status;
+        job.assignedGpuId = gpuId;
+        job.startTime = started;
+        job.finishTime = finished;
+        job.cancellationTime = cancelled;
+        job.cancelledBy = by;
+        job.cancelledReason = reason;
+        return job;
+    }
+
 }

@@ -50,4 +50,36 @@ public class AccessRequest {
     public String getStatus() {
         return status;
     }
+
+    // STORAGE: pending requests must preserve the chosen password too.
+    private String password;
+
+    // Use this constructor for NEW registrations. The old one still compiles.
+    public AccessRequest(int id, String name, String email, String phone,
+                         String password) {
+        this(id, name, email, phone);
+        rememberPassword(password);
+    }
+
+    public void rememberPassword(String password) {
+        if (password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Registration password is required.");
+        }
+        this.password = password;
+    }
+
+    public String getPasswordForStorage() { return password; }
+
+    // STORAGE: restoration is not a new approval or rejection.
+    public static AccessRequest restore(int id, String name, String email,
+            String phone, String password, String status) {
+        if (!"Pending".equals(status) && !"Approved".equals(status) &&
+            !"Rejected".equals(status)) {
+            throw new IllegalArgumentException("Invalid saved request status.");
+        }
+        AccessRequest request = new AccessRequest(id, name, email, phone, password);
+        request.status = status;
+        return request;
+    }
+
 }

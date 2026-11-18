@@ -43,4 +43,14 @@ public class GPU {
         return "GPU ID: " + id + ", Status: Busy, Current job " + currentJob.getJobId();
     }
     
+
+    // STORAGE: reconnect an ALREADY running job; assign() would start it again.
+    public void restoreCurrentJob(Job job) {
+        if (!isFree() || job == null || !"Running".equals(job.getStatus()) ||
+            job.getAssignedGpuId() != id) {
+            throw new IllegalArgumentException("Invalid saved GPU assignment.");
+        }
+        currentJob = job;
+    }
+
 }
