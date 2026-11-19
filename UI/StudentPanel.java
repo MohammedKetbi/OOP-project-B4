@@ -328,7 +328,8 @@ public class StudentPanel extends JPanel {
             "Submitted",
             "Predicted Start",
             "Predicted Finish",
-            "Wait"
+            "Wait",
+            "Queue Position"
         };
 
         // Create a non-editable table
@@ -651,6 +652,15 @@ public class StudentPanel extends JPanel {
                 wait = job.getActualQueueWait() + " min";
             }
 
+            // Show queue position only for queued jobs
+            String queuePosition = "-";
+
+            if ("Queued".equals(job.getStatus())) {
+                queuePosition = String.valueOf(
+                    scheduler.getQueuePosition(job)
+                );
+            }
+
             // Add job information to the table
             jobsModel.addRow(new Object[]{
                 job.getJobId(),
@@ -662,7 +672,8 @@ public class StudentPanel extends JPanel {
                 formatTime(job.getSubmissionTime()),
                 formatTime(predictedStart),
                 formatTime(predictedFinish),
-                wait
+                wait,
+                queuePosition
             });
         }
 
