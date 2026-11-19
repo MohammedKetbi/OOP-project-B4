@@ -1,8 +1,8 @@
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
-import UI.LoginFrame;
-import UI.RegistrationFrame;
+import ui.LoginFrame;
+import ui.RegistrationFrame;
 
 
 public class test{
