@@ -1,4 +1,4 @@
-package UI;
+package ui;
 import java.time.format.DateTimeFormatter;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
