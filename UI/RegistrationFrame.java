@@ -119,50 +119,112 @@ public void actionPerformed(ActionEvent event){
     if (event.getSource() == submitButton) submitRequest();
     else if (event.getSource() == backButton) returnToLogin();
 }
-private void submitRequest(){
-    String universityId = universityIdField.getText();
-    String fullName = fullNameField.getText();
-    String email = emailField.getText();
-    String phone = phoneField.getText();
+
+private void submitRequest() {
+
+    // Confirm that the Submit button was clicked
+    System.out.println("DEBUG: Submit button clicked");
+
+    // Read student information
+    String universityId = universityIdField.getText().trim();
+    String fullName = fullNameField.getText().trim();
+    String email = emailField.getText().trim();
+    String phone = phoneField.getText().trim();
     String password = new String(passwordField.getPassword());
 
+    // Reset message appearance
     messageLabel.setForeground(Color.RED);
     messageLabel.setBackground(new Color(255, 238, 235));
 
-    if(isBlank(universityId) || isBlank(fullName) || isBlank(email) || isBlank(phone) || isBlank(password)){
-        messageLabel.setText("Please complete all five fields.");
+    // Check that all fields are completed
+    if (isBlank(universityId) ||
+        isBlank(fullName) ||
+        isBlank(email) ||
+        isBlank(phone) ||
+        isBlank(password)) {
+
+        showRegistrationError("Please complete all five fields.");
         return;
     }
+
+    // Validate university ID
     if (!universityId.matches("[0-9]+")) {
-        showRegistrationError("University ID must contain digits only");
+
+        showRegistrationError(
+            "University ID must contain digits only."
+        );
         universityIdField.requestFocusInWindow();
         return;
     }
 
-    if (!phone.matches("\\+?[0-9]{7-15}")) {
-        showRegistrationError("Enter a phone number with 7 to 15 digits");
+    // Validate phone number
+    if (!phone.matches("\\+?[0-9]{7,15}")) {
+
+        showRegistrationError(
+            "Enter a phone number with 7 to 15 digits."
+        );
         phoneField.requestFocusInWindow();
         return;
     }
-    
-    if (!email.matches("^[^\\s@]+@[^\\s@.]+(\\.[^\\s@.]+)+$")) {
-    showRegistrationError("Enter a valid email address.");
-    emailField.requestFocusInWindow();
-    return;
-}
 
-    try{
-        accountActions.submitRegistration(universityId, fullName, email, phone, password);
+    // Validate email address
+    if (!email.matches(
+            "^[^\\s@]+@[^\\s@.]+(\\.[^\\s@.]+)+$")) {
+
+        showRegistrationError(
+            "Enter a valid email address."
+        );
+        emailField.requestFocusInWindow();
+        return;
+    }
+
+    System.out.println("DEBUG: Registration validation passed");
+
+    try {
+
+        // Send registration to the application controller
+        accountActions.submitRegistration(
+            universityId,
+            fullName,
+            email,
+            phone,
+            password
+        );
+
+        System.out.println("DEBUG: Registration callback completed");
+
+        // Display successful registration
         messageLabel.setForeground(new Color(0, 110, 94));
         messageLabel.setBackground(new Color(225, 243, 238));
-        messageLabel.setText("Request sent. Status: Pending");
 
-        JOptionPane.showMessageDialog(this, "Your request was sent, wait for administrator approval");
+        messageLabel.setText(
+            "Request sent. Status: Pending"
+        );
 
-    } catch (IllegalArgumentException | IllegalStateException error) {
-        messageLabel.setText(error.getMessage());
+        JOptionPane.showMessageDialog(
+            this,
+            "Your request was sent.\n"
+            + "Wait for administrator approval.",
+            "Registration Successful",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+
+    } catch (IllegalArgumentException |
+             IllegalStateException error) {
+
+        // Display registration or storage errors
+        System.out.println(
+            "DEBUG: Registration failed: " + error.getMessage()
+        );
+
+        showRegistrationError(
+            error.getMessage() == null
+                ? "Registration failed."
+                : error.getMessage()
+        );
     }
 }
+
 private void showRegistrationError(String message){
     messageLabel.setForeground(Color.RED);
     messageLabel.setBackground(new Color(255, 238, 235));

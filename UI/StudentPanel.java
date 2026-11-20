@@ -1,18 +1,20 @@
 
 package ui;
 
-
 import model.Student;
 import model.TimeAllowance;
 import model.Job;
+
 import logic.Scheduler;
 import logic.SimulationClock;
+import logic.AppState;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +27,10 @@ public class StudentPanel extends JPanel {
     private final Student student;
     private final Scheduler scheduler;
     private final SimulationClock clock;
+
+    // Shared application state and saving callback
+    private AppState appState;
+    private Runnable saveChanges;
 
     // GPU allowance labels
     private JLabel allocatedLabel;
@@ -43,12 +49,16 @@ public class StudentPanel extends JPanel {
     private final DateTimeFormatter dateFormat =
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    // Constructor
-    public StudentPanel(Student student,
-                        Scheduler scheduler,
-                        SimulationClock clock) {
+    // Original constructor for existing test classes
+    public StudentPanel(
+            Student student,
+            Scheduler scheduler,
+            SimulationClock clock) {
 
-        if (student == null || scheduler == null || clock == null) {
+        if (student == null ||
+            scheduler == null ||
+            clock == null) {
+
             throw new IllegalArgumentException(
                 "Student, Scheduler and Clock are required"
             );
@@ -74,20 +84,65 @@ public class StudentPanel extends JPanel {
         refreshAll();
     }
 
+    // Constructor for the integrated application
+    public StudentPanel(
+            Student student,
+            Scheduler scheduler,
+            SimulationClock clock,
+            AppState appState,
+            Runnable saveChanges) {
+
+        // Reuse the original constructor
+        this(student, scheduler, clock);
+
+        if (appState == null || saveChanges == null) {
+
+            throw new IllegalArgumentException(
+                "Application state and saving callback are required."
+            );
+        }
+
+        if (appState.getScheduler() != scheduler ||
+            appState.getClock() != clock ||
+            !appState.getStudents().contains(student)) {
+
+            throw new IllegalArgumentException(
+                "StudentPanel must use the shared application state."
+            );
+        }
+
+        this.appState = appState;
+        this.saveChanges = saveChanges;
+    }
+
+    // Saves changes through the application controller
+    private void saveStudentChanges() {
+
+        if (saveChanges != null) {
+            saveChanges.run();
+        }
+    }
+
     // Creates the student home screen
     private JPanel createHomePanel() {
 
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        JPanel panel = new JPanel(
+            new BorderLayout(10, 10)
+        );
 
         // Student information
-        JPanel studentInfo = new JPanel(new GridLayout(2, 1));
+        JPanel studentInfo = new JPanel(
+            new GridLayout(2, 1)
+        );
 
         studentInfo.add(
             new JLabel("Welcome, " + student.getName())
         );
 
         studentInfo.add(
-            new JLabel("Student ID: " + student.getStudentId())
+            new JLabel(
+                "Student ID: " + student.getStudentId()
+            )
         );
 
         panel.add(studentInfo, BorderLayout.NORTH);
@@ -137,7 +192,7 @@ public class StudentPanel extends JPanel {
         JTextField applicationField = new JTextField();
         JTextArea descriptionArea = new JTextArea(3, 20);
 
-        // Task sizes supported by Job
+        // Supported task sizes
         String[] sizes = {
             "Small",
             "Medium",
@@ -145,7 +200,8 @@ public class StudentPanel extends JPanel {
             "Very large"
         };
 
-        JComboBox<String> sizeBox = new JComboBox<>(sizes);
+        JComboBox<String> sizeBox =
+            new JComboBox<>(sizes);
 
         JButton submitButton = new JButton("Submit Job");
 
@@ -169,15 +225,23 @@ public class StudentPanel extends JPanel {
         submitButton.addActionListener(e -> {
 
             String title = titleField.getText().trim();
-            String application = applicationField.getText().trim();
-            String description = descriptionArea.getText().trim();
-            String size = (String) sizeBox.getSelectedItem();
+            String application =
+                applicationField.getText().trim();
+            String description =
+                descriptionArea.getText().trim();
 
-            // Check required fields
+            String size =
+                (String) sizeBox.getSelectedItem();
+
+            // Validate required fields
             if (title.isEmpty() ||
                 application.isEmpty() ||
                 description.isEmpty()) {
-            Dialog.showError(this, "Please fill in all job details.");
+
+                Dialog.showError(
+                    this,
+                    "Please fill in all job details."
+                );
                 return;
             }
 
@@ -185,29 +249,43 @@ public class StudentPanel extends JPanel {
             int duration;
 
             switch (size) {
+
                 case "Small":
                     duration = 5;
                     break;
+
                 case "Medium":
                     duration = 15;
                     break;
+
                 case "Large":
                     duration = 30;
                     break;
+
                 case "Very large":
                     duration = 60;
                     break;
+
                 default:
-                   Dialog.showError(this, "Invalid task size.");
+                    Dialog.showError(
+                        this,
+                        "Invalid task size."
+                    );
                     return;
             }
 
-            int available = student.getAllowance().available();
+            int available =
+                student.getAllowance().available();
 
             // Check available GPU minutes
             if (duration > available) {
 
-                Dialog.showError(this, "Required: " + duration + " minutes\nAvailable: " + available + " minutes");
+                Dialog.showError(
+                    this,
+                    "Required: " + duration
+                        + " minutes\nAvailable: "
+                        + available + " minutes"
+                );
                 return;
             }
 
@@ -231,28 +309,43 @@ public class StudentPanel extends JPanel {
 
             try {
 
-                // Generate the next available job ID
-                int nextId = 101;
+                // Generate a unique job ID
+                String jobId;
 
-                for (Job existing : scheduler.getAllJobs()) {
+                if (appState != null) {
 
-                    String id = existing.getJobId();
+                    // Integrated application uses AppState
+                    jobId = appState.allocateJobId();
 
-                    if (id != null && id.matches("J[0-9]+")) {
+                } else {
 
-                        int number = Integer.parseInt(
-                            id.substring(1)
-                        );
+                    // Existing test launcher compatibility
+                    int nextId = 101;
 
-                        if (number >= nextId) {
-                            nextId = number + 1;
+                    for (Job existing :
+                            scheduler.getAllJobs()) {
+
+                        String id = existing.getJobId();
+
+                        if (id != null &&
+                            id.matches("J[0-9]+")) {
+
+                            int number = Integer.parseInt(
+                                id.substring(1)
+                            );
+
+                            if (number >= nextId) {
+                                nextId = number + 1;
+                            }
                         }
                     }
+
+                    jobId = "J" + nextId;
                 }
 
-                // Create a job using the simulation clock
+                // Create a job using simulation time
                 Job job = new Job(
-                    "J" + nextId,
+                    jobId,
                     student.getStudentId(),
                     title,
                     application,
@@ -261,10 +354,13 @@ public class StudentPanel extends JPanel {
                     clock.getTime()
                 );
 
-                // Submit job to the scheduler
+                // Submit job through the scheduler
                 scheduler.submit(job);
 
-                // Update the interface
+                // Save accepted job and allowance
+                saveStudentChanges();
+
+                // Update interface
                 refreshAll();
 
                 JOptionPane.showMessageDialog(
@@ -282,10 +378,16 @@ public class StudentPanel extends JPanel {
                 descriptionArea.setText("");
                 sizeBox.setSelectedIndex(0);
 
-            } catch (IllegalArgumentException |
-                     IllegalStateException ex) {
+            } catch (RuntimeException ex) {
 
-                Dialog.showError(this, ex.getMessage());
+                refreshAll();
+
+                Dialog.showError(
+                    this,
+                    ex.getMessage() == null
+                        ? "Job submission failed."
+                        : ex.getMessage()
+                );
             }
         });
 
@@ -295,7 +397,9 @@ public class StudentPanel extends JPanel {
     // Creates the My Jobs screen
     private JPanel createJobsPanel() {
 
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        JPanel panel = new JPanel(
+            new BorderLayout(10, 10)
+        );
 
         // Table columns
         String[] columns = {
@@ -316,7 +420,8 @@ public class StudentPanel extends JPanel {
         jobsModel = new DefaultTableModel(columns, 0) {
 
             @Override
-            public boolean isCellEditable(int row, int column) {
+            public boolean isCellEditable(
+                    int row, int column) {
                 return false;
             }
         };
@@ -355,8 +460,11 @@ public class StudentPanel extends JPanel {
         searchPanel.add(statusFilter);
 
         // Job action buttons
-        JButton cancelButton = new JButton("Cancel Job");
-        JButton refreshButton = new JButton("Refresh");
+        JButton cancelButton =
+            new JButton("Cancel Job");
+
+        JButton refreshButton =
+            new JButton("Refresh");
 
         JPanel buttonPanel = new JPanel();
 
@@ -369,7 +477,10 @@ public class StudentPanel extends JPanel {
         );
 
         topPanel.add(
-            new JLabel("My Jobs", SwingConstants.CENTER),
+            new JLabel(
+                "My Jobs",
+                SwingConstants.CENTER
+            ),
             BorderLayout.NORTH
         );
 
@@ -389,28 +500,37 @@ public class StudentPanel extends JPanel {
         searchField.getDocument().addDocumentListener(
             new DocumentListener() {
 
+                @Override
                 public void insertUpdate(DocumentEvent e) {
                     filterJobs();
                 }
 
+                @Override
                 public void removeUpdate(DocumentEvent e) {
                     filterJobs();
                 }
 
+                @Override
                 public void changedUpdate(DocumentEvent e) {
                     filterJobs();
                 }
             }
         );
 
-        // Filter when the selected status changes
-        statusFilter.addActionListener(e -> filterJobs());
+        // Filter when status changes
+        statusFilter.addActionListener(
+            e -> filterJobs()
+        );
 
-        // Cancel the selected job
-        cancelButton.addActionListener(e -> cancelSelectedJob());
+        // Cancel selected job
+        cancelButton.addActionListener(
+            e -> cancelSelectedJob()
+        );
 
         // Refresh jobs and allowance
-        refreshButton.addActionListener(e -> refreshAll());
+        refreshButton.addActionListener(
+            e -> refreshAll()
+        );
 
         return panel;
     }
@@ -444,7 +564,8 @@ public class StudentPanel extends JPanel {
                     // Filter by job status
                     boolean matchesStatus =
                         "All".equals(status)
-                        || entry.getStringValue(3).equals(status);
+                        || entry.getStringValue(3)
+                            .equals(status);
 
                     return matchesSearch && matchesStatus;
                 }
@@ -459,8 +580,11 @@ public class StudentPanel extends JPanel {
 
         if (selectedRow == -1) {
 
-           Dialog.showError(this, "Please select a job first.");
-           return;
+            Dialog.showError(
+                this,
+                "Please select a job first."
+            );
+            return;
         }
 
         // Convert displayed row to model row
@@ -486,7 +610,7 @@ public class StudentPanel extends JPanel {
 
         if (selectedJob == null) {
 
-           Dialog.showError(this, "Job not found.");
+            Dialog.showError(this, "Job not found.");
             return;
         }
 
@@ -496,7 +620,10 @@ public class StudentPanel extends JPanel {
         if (!status.equals("Queued") &&
             !status.equals("Running")) {
 
-            Dialog.showError(this, "Only queued or running jobs can be cancelled.");
+            Dialog.showError(
+                this,
+                "Only queued or running jobs can be cancelled."
+            );
             return;
         }
 
@@ -514,7 +641,10 @@ public class StudentPanel extends JPanel {
 
         if (reason.isEmpty()) {
 
-            Dialog.showError(this, "A cancellation reason is required.");
+            Dialog.showError(
+                this,
+                "A cancellation reason is required."
+            );
             return;
         }
 
@@ -533,19 +663,35 @@ public class StudentPanel extends JPanel {
         try {
 
             // Scheduler handles cancellation and charging
-            scheduler.cancel(selectedJob, student, reason);
+            scheduler.cancel(
+                selectedJob,
+                student,
+                reason
+            );
+
+            // Save cancellation and allowance changes
+            saveStudentChanges();
 
             refreshAll();
 
             JOptionPane.showMessageDialog(
                 this,
-                "Job " + jobId + " cancelled successfully."
+                "Job " + jobId
+                    + " cancelled successfully.",
+                "Cancellation Successful",
+                JOptionPane.INFORMATION_MESSAGE
             );
 
-        } catch (IllegalArgumentException |
-                 IllegalStateException ex) {
+        } catch (RuntimeException ex) {
 
-           Dialog.showError(this, ex.getMessage());
+            refreshAll();
+
+            Dialog.showError(
+                this,
+                ex.getMessage() == null
+                    ? "Cancellation failed."
+                    : ex.getMessage()
+            );
         }
     }
 
@@ -559,7 +705,7 @@ public class StudentPanel extends JPanel {
         return time.format(dateFormat);
     }
 
-    // Loads real jobs belonging to the logged-in student
+    // Loads jobs belonging to the logged-in student
     public void refreshJobs() {
 
         // Clear previous table rows
@@ -597,7 +743,7 @@ public class StudentPanel extends JPanel {
                 predictedFinish = job.getFinishTime();
             }
 
-            // Display GPU ID or dash if not assigned
+            // Display GPU ID or dash
             String gpu = job.getAssignedGpuId() == 0
                 ? "-"
                 : String.valueOf(job.getAssignedGpuId());
@@ -612,13 +758,15 @@ public class StudentPanel extends JPanel {
 
             } else if (job.getStartTime() != null) {
 
-                wait = job.getActualQueueWait() + " min";
+                wait = job.getActualQueueWait()
+                    + " min";
             }
 
-            // Show queue position only for queued jobs
+            // Show queue position for queued jobs
             String queuePosition = "-";
 
             if ("Queued".equals(job.getStatus())) {
+
                 queuePosition = String.valueOf(
                     scheduler.getQueuePosition(job)
                 );
@@ -640,14 +788,15 @@ public class StudentPanel extends JPanel {
             });
         }
 
-        // Apply current search and filter settings
+        // Apply search and filter
         filterJobs();
     }
 
     // Updates GPU allowance labels
     public void refreshAllowance() {
 
-        TimeAllowance allowance = student.getAllowance();
+        TimeAllowance allowance =
+            student.getAllowance();
 
         allocatedLabel.setText(
             "Allocated: " + allowance.getAllocated()

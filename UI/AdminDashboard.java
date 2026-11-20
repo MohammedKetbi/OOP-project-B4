@@ -6,9 +6,11 @@ import model.Student;
 import model.Job;
 import model.GPU;
 import model.TimeAllowance;
+import model.AccessRequest;
 
 import logic.Scheduler;
 import logic.SimulationClock;
+import logic.AppState;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -28,6 +30,10 @@ public class AdminDashboard extends JPanel {
     private final Scheduler scheduler;
     private final SimulationClock clock;
 
+    // Shared registration state and saving callback
+    private AppState appState;
+    private Runnable saveChanges;
+
     // Dashboard information
     private JLabel clockLabel;
     private JLabel utilizationLabel;
@@ -45,21 +51,22 @@ public class AdminDashboard extends JPanel {
     private JTable studentsTable;
     private DefaultTableModel studentsModel;
     private TableRowSorter<DefaultTableModel> studentsSorter;
-
-    // Search field
     private JTextField studentSearchField;
+
+    // Registration requests table
+    private JTable requestsTable;
+    private DefaultTableModel requestsModel;
 
     // Date and time format
     private final DateTimeFormatter dateFormat =
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    // Constructor
+    // Original constructor for existing test classes
     public AdminDashboard(
             Administrator administrator,
             Scheduler scheduler,
             SimulationClock clock) {
 
-        // Validate required objects
         if (administrator == null ||
             scheduler == null ||
             clock == null) {
@@ -69,12 +76,10 @@ public class AdminDashboard extends JPanel {
             );
         }
 
-        // Store shared objects
         this.administrator = administrator;
         this.scheduler = scheduler;
         this.clock = clock;
 
-        // Main panel layout
         setLayout(new BorderLayout(10, 10));
 
         // Create dashboard tabs
@@ -83,14 +88,60 @@ public class AdminDashboard extends JPanel {
         tabs.addTab("Dashboard", createDashboardPanel());
         tabs.addTab("Student Search", createStudentSearchPanel());
 
-        // Add tabs to the main panel
         add(tabs, BorderLayout.CENTER);
 
         // Refresh when switching tabs
         tabs.addChangeListener(e -> refreshAll());
 
-        // Load initial information
         refreshAll();
+    }
+
+    // Constructor used by the integrated application
+    public AdminDashboard(
+            Administrator administrator,
+            Scheduler scheduler,
+            SimulationClock clock,
+            AppState appState,
+            Runnable saveChanges) {
+
+        // Reuse the original dashboard constructor
+        this(administrator, scheduler, clock);
+
+        if (appState == null || saveChanges == null) {
+            throw new IllegalArgumentException(
+                "Application state and save callback are required."
+            );
+        }
+
+        if (appState.getScheduler() != scheduler ||
+            appState.getAdministrator() != administrator ||
+            appState.getClock() != clock) {
+
+            throw new IllegalArgumentException(
+                "Dashboard must use the shared application state."
+            );
+        }
+
+        this.appState = appState;
+        this.saveChanges = saveChanges;
+
+        // Add Registration Requests tab
+        JTabbedPane tabs = (JTabbedPane) getComponent(0);
+
+        tabs.addTab(
+            "Registration Requests",
+            createRequestsPanel()
+        );
+
+        refreshRequests();
+    }
+
+    // Saves changes through the application controller
+    private void saveDashboardChanges() {
+
+        if (saveChanges != null) {
+            saveChanges.run();
+        }
     }
 
     // Creates the administrator dashboard
@@ -100,7 +151,6 @@ public class AdminDashboard extends JPanel {
             new BorderLayout(10, 10)
         );
 
-        // Create dashboard heading
         JLabel title = new JLabel(
             "Administrator Dashboard",
             SwingConstants.CENTER
@@ -108,24 +158,22 @@ public class AdminDashboard extends JPanel {
 
         panel.add(title, BorderLayout.NORTH);
 
-        // Create information panel
+        // Dashboard information
         JPanel informationPanel = new JPanel(
             new GridLayout(2, 2, 10, 10)
         );
 
-        // Initialize information labels
         clockLabel = new JLabel();
         utilizationLabel = new JLabel();
         runningLabel = new JLabel();
         queuedLabel = new JLabel();
 
-        // Add information labels
         informationPanel.add(clockLabel);
         informationPanel.add(utilizationLabel);
         informationPanel.add(runningLabel);
         informationPanel.add(queuedLabel);
 
-        // Create GPU status panel
+        // GPU status panel
         JPanel gpuPanel = new JPanel(
             new GridLayout(2, 2, 10, 10)
         );
@@ -134,7 +182,6 @@ public class AdminDashboard extends JPanel {
             BorderFactory.createTitledBorder("GPU Status")
         );
 
-        // Create four GPU labels
         gpuLabels = new JLabel[4];
 
         for (int i = 0; i < 4; i++) {
@@ -154,7 +201,7 @@ public class AdminDashboard extends JPanel {
         topPanel.add(informationPanel);
         topPanel.add(gpuPanel);
 
-        // Create job table columns
+        // Job table columns
         String[] columns = {
             "Job ID",
             "Student ID",
@@ -166,33 +213,27 @@ public class AdminDashboard extends JPanel {
             "Remaining Wait"
         };
 
-        // Create a table model that cannot be edited
         jobsModel = new DefaultTableModel(columns, 0) {
 
             @Override
             public boolean isCellEditable(
                     int row, int column) {
-
                 return false;
             }
         };
 
-        // Create the jobs table
         jobsTable = new JTable(jobsModel);
 
-        // Allow only one job to be selected
         jobsTable.setSelectionMode(
             ListSelectionModel.SINGLE_SELECTION
         );
 
-        // Create scrolling for the job table
         JScrollPane jobsScroll = new JScrollPane(jobsTable);
 
         jobsScroll.setBorder(
             BorderFactory.createTitledBorder("All Jobs")
         );
 
-        // Combine dashboard details and jobs
         JPanel centerPanel = new JPanel(
             new BorderLayout(10, 10)
         );
@@ -202,16 +243,14 @@ public class AdminDashboard extends JPanel {
 
         panel.add(centerPanel, BorderLayout.CENTER);
 
-        // Create dashboard buttons
+        // Dashboard buttons
         JButton advanceButton = new JButton(
             "Advance 1 Minute"
         );
 
         JButton refreshButton = new JButton("Refresh");
-
         JButton cancelButton = new JButton("Cancel Job");
 
-        // Add buttons to a panel
         JPanel buttonPanel = new JPanel();
 
         buttonPanel.add(advanceButton);
@@ -220,29 +259,32 @@ public class AdminDashboard extends JPanel {
 
         panel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Advance the simulation clock
+        // Advance simulation
         advanceButton.addActionListener(e -> {
 
             try {
 
-                // Advance simulation by one minute
                 scheduler.advanceMinute();
 
-                // Refresh dashboard information
+                // Save the updated simulation time
+                saveDashboardChanges();
+
                 refreshAll();
 
-            } catch (IllegalArgumentException |
-                     IllegalStateException ex) {
+            } catch (RuntimeException ex) {
 
+                refreshAll();
                 Dialog.showError(this, ex.getMessage());
             }
         });
 
-        // Refresh dashboard
-        refreshButton.addActionListener(e -> refreshAll());
+        refreshButton.addActionListener(
+            e -> refreshAll()
+        );
 
-        // Cancel selected job
-        cancelButton.addActionListener(e -> cancelSelectedJob());
+        cancelButton.addActionListener(
+            e -> cancelSelectedJob()
+        );
 
         return panel;
     }
@@ -254,15 +296,12 @@ public class AdminDashboard extends JPanel {
             new BorderLayout(10, 10)
         );
 
-        // Heading
         JLabel title = new JLabel(
             "Search Registered Students",
             SwingConstants.CENTER
         );
 
-        panel.add(title, BorderLayout.NORTH);
-
-        // Create student table columns
+        // Student table columns
         String[] columns = {
             "Student ID",
             "Name",
@@ -274,27 +313,22 @@ public class AdminDashboard extends JPanel {
             "Available"
         };
 
-        // Prevent direct editing of student information
         studentsModel = new DefaultTableModel(columns, 0) {
 
             @Override
             public boolean isCellEditable(
                     int row, int column) {
-
                 return false;
             }
         };
 
-        // Create student table
         studentsTable = new JTable(studentsModel);
 
-        // Allow sorting and filtering
         studentsSorter =
             new TableRowSorter<>(studentsModel);
 
         studentsTable.setRowSorter(studentsSorter);
 
-        // Create student search field
         studentSearchField = new JTextField();
 
         JPanel searchPanel = new JPanel(
@@ -311,7 +345,6 @@ public class AdminDashboard extends JPanel {
             BorderLayout.CENTER
         );
 
-        // Combine heading and search field
         JPanel topPanel = new JPanel(
             new BorderLayout(10, 10)
         );
@@ -321,20 +354,18 @@ public class AdminDashboard extends JPanel {
 
         panel.add(topPanel, BorderLayout.NORTH);
 
-        // Add student table
         panel.add(
             new JScrollPane(studentsTable),
             BorderLayout.CENTER
         );
 
-        // Create refresh button
         JButton refreshButton = new JButton(
             "Refresh Students"
         );
 
         panel.add(refreshButton, BorderLayout.SOUTH);
 
-        // Search when text changes
+        // Search whenever text changes
         studentSearchField.getDocument().addDocumentListener(
             new DocumentListener() {
 
@@ -355,7 +386,6 @@ public class AdminDashboard extends JPanel {
             }
         );
 
-        // Refresh student information
         refreshButton.addActionListener(
             e -> refreshStudents()
         );
@@ -363,7 +393,7 @@ public class AdminDashboard extends JPanel {
         return panel;
     }
 
-    // Filters students by university ID or name
+    // Filters students by ID or name
     private void filterStudents() {
 
         String search = studentSearchField.getText()
@@ -377,14 +407,12 @@ public class AdminDashboard extends JPanel {
                     Entry<? extends DefaultTableModel,
                           ? extends Integer> entry) {
 
-                    // Read student ID and name
                     String id = entry.getStringValue(0)
                         .toLowerCase();
 
                     String name = entry.getStringValue(1)
                         .toLowerCase();
 
-                    // Display matching students
                     return id.contains(search)
                         || name.contains(search);
                 }
@@ -392,31 +420,221 @@ public class AdminDashboard extends JPanel {
         );
     }
 
-    // Cancels a job selected by the administrator
+    // Creates the Registration Requests screen
+    private JPanel createRequestsPanel() {
+
+        JPanel panel = new JPanel(
+            new BorderLayout(10, 10)
+        );
+
+        JLabel title = new JLabel(
+            "Student Registration Requests",
+            SwingConstants.CENTER
+        );
+
+        panel.add(title, BorderLayout.NORTH);
+
+        // Registration table columns
+        String[] columns = {
+            "Student ID",
+            "Name",
+            "Email",
+            "Phone",
+            "Status"
+        };
+
+        requestsModel = new DefaultTableModel(columns, 0) {
+
+            @Override
+            public boolean isCellEditable(
+                    int row, int column) {
+                return false;
+            }
+        };
+
+        requestsTable = new JTable(requestsModel);
+
+        requestsTable.setSelectionMode(
+            ListSelectionModel.SINGLE_SELECTION
+        );
+
+        panel.add(
+            new JScrollPane(requestsTable),
+            BorderLayout.CENTER
+        );
+
+        // Registration action buttons
+        JButton approveButton = new JButton("Approve");
+        JButton rejectButton = new JButton("Reject");
+        JButton refreshButton = new JButton("Refresh");
+
+        JPanel buttonPanel = new JPanel();
+
+        buttonPanel.add(approveButton);
+        buttonPanel.add(rejectButton);
+        buttonPanel.add(refreshButton);
+
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        approveButton.addActionListener(
+            e -> processRequest(true)
+        );
+
+        rejectButton.addActionListener(
+            e -> processRequest(false)
+        );
+
+        refreshButton.addActionListener(
+            e -> refreshRequests()
+        );
+
+        return panel;
+    }
+
+    // Approves or rejects a registration request
+    private void processRequest(boolean approve) {
+
+        int selectedRow = requestsTable.getSelectedRow();
+
+        if (selectedRow == -1) {
+
+            Dialog.showError(
+                this,
+                "Please select a registration request."
+            );
+            return;
+        }
+
+        int modelRow =
+            requestsTable.convertRowIndexToModel(selectedRow);
+
+        int requestId = Integer.parseInt(
+            requestsModel.getValueAt(modelRow, 0).toString()
+        );
+
+        // Find the original request
+        AccessRequest selectedRequest = null;
+
+        for (AccessRequest request : appState.getRequests()) {
+
+            if (request.getId() == requestId) {
+                selectedRequest = request;
+                break;
+            }
+        }
+
+        if (selectedRequest == null) {
+
+            Dialog.showError(this, "Request not found.");
+            return;
+        }
+
+        if (!"Pending".equals(selectedRequest.getStatus())) {
+
+            Dialog.showError(
+                this,
+                "This request has already been processed."
+            );
+            return;
+        }
+
+        String action = approve ? "approve" : "reject";
+
+        // Confirm administrator decision
+        int choice = JOptionPane.showConfirmDialog(
+            this,
+            "Are you sure you want to " + action
+                + " this request?",
+            "Confirm Registration",
+            JOptionPane.YES_NO_OPTION
+        );
+
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+
+            if (approve) {
+
+                // Use the student's original password
+                administrator.approve(
+                    selectedRequest,
+                    selectedRequest.getPasswordForStorage()
+                );
+
+            } else {
+
+                administrator.reject(selectedRequest);
+            }
+
+            // Save updated registration state
+            saveDashboardChanges();
+
+            // Refresh all tables
+            refreshAll();
+
+            JOptionPane.showMessageDialog(
+                this,
+                approve
+                    ? "Student approved successfully."
+                    : "Registration rejected successfully.",
+                "Registration Updated",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (RuntimeException ex) {
+
+            refreshAll();
+            Dialog.showError(this, ex.getMessage());
+        }
+    }
+
+    // Loads registration requests from AppState
+    public void refreshRequests() {
+
+        if (appState == null || requestsModel == null) {
+            return;
+        }
+
+        requestsModel.setRowCount(0);
+
+        for (AccessRequest request : appState.getRequests()) {
+
+            requestsModel.addRow(new Object[]{
+                request.getId(),
+                request.getName(),
+                request.getEmail(),
+                request.getPhone(),
+                request.getStatus()
+            });
+        }
+    }
+
+    // Cancels a selected job
     private void cancelSelectedJob() {
 
-        // Get selected row
         int selectedRow = jobsTable.getSelectedRow();
 
         if (selectedRow == -1) {
 
-            Dialog.showError(this, "Please select a job first.");
-
+            Dialog.showError(
+                this,
+                "Please select a job first."
+            );
             return;
         }
 
-        // Get selected job ID
         String jobId = jobsTable.getValueAt(
             selectedRow, 0
         ).toString();
 
-        // Find the real job
+        // Find the actual job
         Job selectedJob = null;
 
         for (Job job : scheduler.getAllJobs()) {
 
             if (job.getJobId().equals(jobId)) {
-
                 selectedJob = job;
                 break;
             }
@@ -425,7 +643,6 @@ public class AdminDashboard extends JPanel {
         if (selectedJob == null) {
 
             Dialog.showError(this, "Job not found.");
-
             return;
         }
 
@@ -433,29 +650,31 @@ public class AdminDashboard extends JPanel {
         if (!"Queued".equals(selectedJob.getStatus())
                 && !"Running".equals(selectedJob.getStatus())) {
 
-            Dialog.showError(this, "Only queued or running jobs can be cancelled.");
-
+            Dialog.showError(
+                this,
+                "Only queued or running jobs can be cancelled."
+            );
             return;
         }
 
-        // Ask administrator for cancellation reason
+        // Ask for cancellation reason
         String reason = JOptionPane.showInputDialog(
             this,
             "Reason for cancelling job " + jobId + ":"
         );
 
-        // Stop if administrator closes dialog
         if (reason == null) {
             return;
         }
 
         reason = reason.trim();
 
-        // Require a cancellation reason
         if (reason.isEmpty()) {
 
-            Dialog.showError(this, "A cancellation reason is required.");
-
+            Dialog.showError(
+                this,
+                "A cancellation reason is required."
+            );
             return;
         }
 
@@ -473,17 +692,24 @@ public class AdminDashboard extends JPanel {
 
         try {
 
-            // Administrator cancels through existing scheduler
+            // Cancel through existing administrator logic
             administrator.cancelJob(selectedJob, reason);
 
-            // Refresh displayed information
+            // Save cancellation
+            saveDashboardChanges();
+
             refreshAll();
 
-            JOptionPane.showMessageDialog(this, "Job " + jobId + " cancelled successfully.", "Cancellation Successful", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(
+                this,
+                "Job " + jobId + " cancelled successfully.",
+                "Cancellation Successful",
+                JOptionPane.INFORMATION_MESSAGE
+            );
 
-        } catch (IllegalArgumentException |
-                 IllegalStateException ex) {
+        } catch (RuntimeException ex) {
 
+            refreshAll();
             Dialog.showError(this, ex.getMessage());
         }
     }
@@ -491,17 +717,15 @@ public class AdminDashboard extends JPanel {
     // Updates dashboard information
     public void refreshDashboard() {
 
-        // Display current simulation time
         clockLabel.setText(
             "Simulation Time: "
                 + clock.getTime().format(dateFormat)
         );
 
-        // Get GPU utilization
+        // Calculate GPU utilization
         OptionalDouble utilization =
             scheduler.getUtilization();
 
-        // Display utilization percentage or N/A
         if (utilization.isPresent()) {
 
             utilizationLabel.setText(
@@ -533,7 +757,6 @@ public class AdminDashboard extends JPanel {
             }
         }
 
-        // Update counters
         runningLabel.setText(
             "Running Jobs: " + running
         );
@@ -542,7 +765,7 @@ public class AdminDashboard extends JPanel {
             "Queued Jobs: " + queued
         );
 
-        // Update GPU status labels
+        // Display GPU statuses
         for (GPU gpu : scheduler.getGpus()) {
 
             int index = gpu.getId() - 1;
@@ -563,13 +786,12 @@ public class AdminDashboard extends JPanel {
             }
         }
 
-        // Clear old job rows
+        // Clear previous job rows
         jobsModel.setRowCount(0);
 
         // Load all jobs
         for (Job job : scheduler.getAllJobs()) {
 
-            // Show queue position for waiting jobs
             String position = "-";
             String wait = "-";
 
@@ -583,12 +805,10 @@ public class AdminDashboard extends JPanel {
                     + " min";
             }
 
-            // Display assigned GPU or dash
             String gpuId = job.getAssignedGpuId() == 0
                 ? "-"
                 : String.valueOf(job.getAssignedGpuId());
 
-            // Add job to table
             jobsModel.addRow(new Object[]{
                 job.getJobId(),
                 job.getStudentId(),
@@ -602,20 +822,16 @@ public class AdminDashboard extends JPanel {
         }
     }
 
-    // Updates the Student Search table
+    // Updates Student Search table
     public void refreshStudents() {
 
-        // Clear old student information
         studentsModel.setRowCount(0);
 
-        // Read registered students from scheduler
         for (Student student : scheduler.getStudents()) {
 
-            // Get student's GPU allowance
             TimeAllowance allowance =
                 student.getAllowance();
 
-            // Add student information
             studentsModel.addRow(new Object[]{
                 student.getStudentId(),
                 student.getName(),
@@ -628,14 +844,14 @@ public class AdminDashboard extends JPanel {
             });
         }
 
-        // Reapply the search filter
         filterStudents();
     }
 
-    // Refreshes both administrator screens
+    // Refreshes all administrator screens
     public void refreshAll() {
 
         refreshDashboard();
         refreshStudents();
+        refreshRequests();
     }
 }
