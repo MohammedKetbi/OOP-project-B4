@@ -1,5 +1,5 @@
 
-package UI;
+package ui;
 
 
 import model.Student;

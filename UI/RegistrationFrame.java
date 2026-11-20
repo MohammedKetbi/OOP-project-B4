@@ -1,4 +1,4 @@
-package UI;
+package ui;
 import java.awt.BorderLayout; //AWTprovides layouts and button event types used by swing
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
@@ -145,11 +145,11 @@ private void submitRequest(){
         return;
     }
     
-    if (!email.contains("^\\\\s@]+@[^\\\\s@.]+(\\\\.[^\\\\s@.]+)+") ) {
-        showRegistrationError("Enter a valid email address.");
-        phoneField.requestFocusInWindow();
-        return;
-    }
+    if (!email.matches("^[^\\s@]+@[^\\s@.]+(\\.[^\\s@.]+)+$")) {
+    showRegistrationError("Enter a valid email address.");
+    emailField.requestFocusInWindow();
+    return;
+}
 
     try{
         accountActions.submitRegistration(universityId, fullName, email, phone, password);
