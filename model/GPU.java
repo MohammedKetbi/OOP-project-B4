@@ -1,9 +1,8 @@
 package model;
 import java.time.LocalDateTime;
-import java.io.Serializable;
 
-public class GPU implements Serializable {
-    private static final long serialVersionUID = 1L;
+
+public class GPU {
     private int id;
     private Job currentJob;
     
@@ -31,7 +30,7 @@ public class GPU implements Serializable {
         if (job == null) throw new IllegalArgumentException("Job is required");
         job.start(id, currenTime);
         this.currentJob = job;
-    };
+    }
     public void release(){
         if (isFree()) throw new IllegalStateException("This GPU is already free");
         if (!currentJob.getStatus().equals("Completed") && !currentJob.getStatus().equals("Cancelled")) throw new IllegalStateException("The running job must finish or be cancelled first");
@@ -44,4 +43,14 @@ public class GPU implements Serializable {
         return "GPU ID: " + id + ", Status: Busy, Current job " + currentJob.getJobId();
     }
     
+
+    // STORAGE: reconnect an ALREADY running job; assign() would start it again.
+    public void restoreCurrentJob(Job job) {
+        if (!isFree() || job == null || !"Running".equals(job.getStatus()) ||
+            job.getStartTime() == null || job.getAssignedGpuId() != id) {
+            throw new IllegalArgumentException("Invalid saved GPU assignment.");
+        }
+        currentJob = job;
+    }
+
 }

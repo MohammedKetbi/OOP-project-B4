@@ -109,7 +109,7 @@ public class LoginFrame extends JFrame implements ActionListener {
             dispose();
         } catch (IllegalArgumentException | IllegalStateException error) {
             passwordField.setText("");
-            messageLabel.setText(error.getMessage());
+            showLoginError(error.getMessage());
             passwordField.requestFocusInWindow();
         }
     }

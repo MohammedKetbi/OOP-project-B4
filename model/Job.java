@@ -1,12 +1,11 @@
 package model;
-import java.io.Serializable;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 
-public class Job implements Serializable {
-    private static final long serialVersionUID = 1L;
+public class Job {
     //System fill-ins
     private String jobId;
     private String studentId;
@@ -71,6 +70,14 @@ public class Job implements Serializable {
     public Job(String jobId, String studentId, String title,
         String applicationName, String description, String taskSize,
         LocalDateTime submissionTime){
+            if (jobId == null || !jobId.matches("J[0-9]+")){throw new IllegalArgumentException("Job ID must be like J101");}
+            checkText(studentId, "Student ID");
+            checkText(title, "Title");
+            checkText(applicationName, "Application name");
+            checkText(description, "Description");
+            checkText(taskSize, "Task size");
+            if (submissionTime == null) {throw new IllegalArgumentException("Submission time is required");}
+            
             this.jobId = jobId;
             this.studentId = studentId;
             this.title = title;
@@ -139,7 +146,7 @@ public class Job implements Serializable {
 
 
     public void checkText(String text, String fieldName) {
-        if (text == null || text.trim().isEmpty()) throw new IllegalArgumentException(fieldName + "cannot be empty");
+        if (text == null || text.trim().isEmpty()) throw new IllegalArgumentException(fieldName + " cannot be empty.");
 
     }
 
@@ -210,5 +217,25 @@ public class Job implements Serializable {
         ", Cancelled by:" + cancelledBy + ", Cancellation reason: " + cancelledReason;
     }
         
+
+
+    // STORAGE: rebuild saved fields without start(), complete() or cancel().
+    // Scheduler.restore() validates timeline, ownership, balances and assignments.
+    public static Job restore(String jobId, String studentId, String title,
+            String applicationName, String description, String taskSize,
+            LocalDateTime submitted, String status, int gpuId,
+            LocalDateTime started, LocalDateTime finished,
+            LocalDateTime cancelled, String by, String reason) {
+        Job job = new Job(jobId, studentId, title, applicationName, description,
+                          taskSize, submitted);
+        job.status = status;
+        job.assignedGpuId = gpuId;
+        job.startTime = started;
+        job.finishTime = finished;
+        job.cancellationTime = cancelled;
+        job.cancelledBy = by;
+        job.cancelledReason = reason;
+        return job;
+    }
 
 }

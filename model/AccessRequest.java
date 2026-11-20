@@ -11,6 +11,10 @@ public class AccessRequest implements Serializable {
 
     // Create a new request
     public AccessRequest(int id, String name, String email, String phone) {
+        if (id <= 0 ) {throw new IllegalArgumentException("University ID must be positive.");}
+        if (name == null || name.trim().isEmpty()) {throw new IllegalArgumentException("Full name is required");}
+        if (email == null || email.trim().isEmpty()) {throw new IllegalArgumentException("Email is required");}
+        if (phone == null || phone.trim().isEmpty()) {throw new IllegalArgumentException("Phone number is required");}
         this.id = id;
         this.name = name;
         this.email = email;
@@ -20,11 +24,13 @@ public class AccessRequest implements Serializable {
 
     // Approve the request
     public void approve() {
+        if (!"Pending".equals(status)) {throw new IllegalStateException("This request has already been processed.");}
         status = "Approved";
     }
 
     // Reject the request
     public void reject() {
+        if (!"Pending".equals(status)) {throw new IllegalStateException("This request has already been processed.");}
         status = "Rejected";
     }
 
@@ -52,4 +58,36 @@ public class AccessRequest implements Serializable {
     public String getStatus() {
         return status;
     }
+
+    // STORAGE: pending requests must preserve the chosen password too.
+    private String password;
+
+    // Use this constructor for NEW registrations. The old one still compiles.
+    public AccessRequest(int id, String name, String email, String phone,
+                         String password) {
+        this(id, name, email, phone);
+        rememberPassword(password);
+    }
+
+    public void rememberPassword(String password) {
+        if (password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Registration password is required.");
+        }
+        this.password = password;
+    }
+
+    public String getPasswordForStorage() { return password; }
+
+    // STORAGE: restoration is not a new approval or rejection.
+    public static AccessRequest restore(int id, String name, String email,
+            String phone, String password, String status) {
+        if (!"Pending".equals(status) && !"Approved".equals(status) &&
+            !"Rejected".equals(status)) {
+            throw new IllegalArgumentException("Invalid saved request status.");
+        }
+        AccessRequest request = new AccessRequest(id, name, email, phone, password);
+        request.status = status;
+        return request;
+    }
+
 }
