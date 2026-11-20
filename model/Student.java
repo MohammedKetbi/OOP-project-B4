@@ -19,7 +19,9 @@ public class Student extends User {
 
         // Calls the constructor of the User class
         super(id, password);
-
+        if (name == null || name.trim().isEmpty()) {throw new IllegalArgumentException("Full name is required.");}
+        if (email == null || email.trim().isEmpty()) {throw new IllegalArgumentException("Email is required.");}
+        if (phone == null || phone.trim().isEmpty()) {throw new IllegalArgumentException("Phone number is required.");}
         this.name = name;
         this.email = email;
         this.phone = phone;
@@ -35,7 +37,9 @@ public class Student extends User {
 
         // Calls the constructor of the User class
         super(id, password);
-
+        if (name == null || name.trim().isEmpty()) {throw new IllegalArgumentException("Full name is required.");}
+        if (email == null || email.trim().isEmpty()) {throw new IllegalArgumentException("Email is required.");}
+        if (phone == null || phone.trim().isEmpty()) {throw new IllegalArgumentException("Phone number is required.");}
         this.name = name;
         this.email = email;
         this.phone = phone;
