@@ -130,18 +130,27 @@ private void submitRequest(){
     messageLabel.setBackground(new Color(255, 238, 235));
 
     if(isBlank(universityId) || isBlank(fullName) || isBlank(email) || isBlank(phone) || isBlank(password)){
-        messageLabel.setText("Please complete all five fields");
+        messageLabel.setText("Please complete all five fields.");
         return;
     }
-    if (!email.contains("@") || !email.contains(".")) {
-        messageLabel.setText("Enter a valid email address.");
+    if (!universityId.matches("[0-9]+")) {
+        showRegistrationError("University ID must contain digits only");
+        universityIdField.requestFocusInWindow();
         return;
     }
 
-    if (!phone.matches("\\+?[0-9]{7,15}")) {
-        messageLabel.setText("Enter 7 to 15 digits for the phone number");
+    if (!phone.matches("\\+?[0-9]{7-15}")) {
+        showRegistrationError("Enter a phone number with 7 to 15 digits");
+        phoneField.requestFocusInWindow();
         return;
     }
+    
+    if (!email.contains("^\\\\s@]+@[^\\\\s@.]+(\\\\.[^\\\\s@.]+)+") ) {
+        showRegistrationError("Enter a valid email address.");
+        phoneField.requestFocusInWindow();
+        return;
+    }
+
     try{
         accountActions.submitRegistration(universityId, fullName, email, phone, password);
         messageLabel.setForeground(new Color(0, 110, 94));
@@ -150,9 +159,15 @@ private void submitRequest(){
 
         JOptionPane.showMessageDialog(this, "Your request was sent, wait for administrator approval");
 
-    } catch (IllegalArgumentException error) {
+    } catch (IllegalArgumentException | IllegalStateException error) {
         messageLabel.setText(error.getMessage());
     }
+}
+private void showRegistrationError(String message){
+    messageLabel.setForeground(Color.RED);
+    messageLabel.setBackground(new Color(255, 238, 235));
+    messageLabel.setText(message);
+    Dialog.showError(this, message);
 }
     private boolean isBlank(String text) {
         if (text == null || text.isEmpty()) {

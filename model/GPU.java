@@ -1,8 +1,9 @@
 package model;
 import java.time.LocalDateTime;
+import java.io.Serializable;
 
-
-public class GPU {
+public class GPU implements Serializable {
+    private static final long serialVersionUID = 1L;
     private int id;
     private Job currentJob;
     

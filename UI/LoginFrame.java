@@ -4,7 +4,7 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.Color;
-import java.awt.Font;
+
 
 import javax.swing.BorderFactory; // Swing provides the window, text, fields, buttons, labels, and dialogs
 import javax.swing.JButton;
@@ -90,19 +90,33 @@ public class LoginFrame extends JFrame implements ActionListener {
         String username = usernameField.getText();
         String password = new String(passwordField.getPassword());
 
-        if (isBlank(username) || isBlank(password)) {
-            messageLabel.setText("Enter your username and password");
+        if (isBlank(username)) {
+           showLoginError("Enter your username");
+           usernameField.requestFocusInWindow();
             return;
         }
 
+        if (isBlank(password)){
+            showLoginError("Enter your password");
+           passwordField.requestFocusInWindow();
+            return;
+        }
+        messageLabel.setText(" ");
+
         try {
             accountActions.signIn(username, password);
-
-            dispose();
-        } catch (IllegalArgumentException error) {
-            messageLabel.setText(error.getMessage());
             passwordField.setText("");
+            dispose();
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            passwordField.setText("");
+            messageLabel.setText(error.getMessage());
+            passwordField.requestFocusInWindow();
         }
+    }
+
+    private void showLoginError(String message) {
+        messageLabel.setText(message);
+        Dialog.showError(this, message);
     }
 
     private void openRegistration() {

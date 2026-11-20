@@ -210,12 +210,7 @@ public class ClockSetUpScreen3 extends JFrame {
                 message = "The simulation clock could not be initialized.";
             }
 
-            JOptionPane.showMessageDialog(
-                this,
-                message,
-                "Clock Setup Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+            Dialog.showError(this, message);
 
             startButton.setEnabled(true);
         }

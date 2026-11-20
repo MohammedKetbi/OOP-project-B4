@@ -1,6 +1,7 @@
 package model;
-
-public abstract class User { //abstract parent class for user and adminstration
+import java.io.Serializable;
+public abstract class User implements Serializable  { //abstract parent class for user and adminstration
+    private static final long serialVersionUID = 1L;
     private String username; //private attributes to protect user information
     private String password;
     public User(String username,String password ){ //a constructor to initialize name and pass

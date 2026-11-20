@@ -12,7 +12,6 @@ import model.TimeAllowance;
 import model.User;
 
 public class Scheduler {
-
     // Contains only jobs waiting for a GPU.
     private final List<Job> queue = new ArrayList<>();
 
@@ -516,4 +515,7 @@ public class Scheduler {
     public GPU[] getGpus() {
         return gpus.clone();
     }
+
+    
+    
 }

@@ -3,8 +3,7 @@ package logic;
 //import java.time package to use LocalDateTime object
 import java.time.*;
 
-public class SimulationClock {
-
+public class SimulationClock  {
     private LocalDateTime now;
 
     // simulation clock constructor to set the start time of the simulation clock

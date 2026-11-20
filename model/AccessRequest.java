@@ -1,5 +1,7 @@
 package model;
-public class AccessRequest {
+import java.io.Serializable;
+public class AccessRequest implements Serializable {
+    private static final long serialVersionUID = 1L;
     // Store the request details
     private int id;
     private String name;

@@ -1,9 +1,9 @@
 
 package model;
-
+import java.io.Serializable;
 // Manages the GPU time allowance of a student
-public class TimeAllowance {
-
+public class TimeAllowance implements Serializable {
+    private static final long serialVersionUID = 1L;
     // Total GPU minutes allocated to the student
     private int allocated;
 
