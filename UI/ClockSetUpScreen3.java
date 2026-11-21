@@ -1,4 +1,4 @@
-package ui;
+package UI;
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.ZoneId;

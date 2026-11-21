@@ -1,4 +1,4 @@
-package ui;
+package UI;
 import java.awt.BorderLayout; //AWTprovides layouts and button event types used by swing
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;

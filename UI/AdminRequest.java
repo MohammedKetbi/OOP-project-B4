@@ -1,3 +1,4 @@
+package UI;
 import java.awt.*;
 import java.text.*;
 import java.time.*;
@@ -6,7 +7,8 @@ import java.util.*;
 import java.util.List;
 import javax.swing.*;
 import javax.swing.table.*;
-import model.Student;
+import model.*;
+import logic.*;
 
 public class AdminRequest extends JPanel {
     private final Administrator administrator;
