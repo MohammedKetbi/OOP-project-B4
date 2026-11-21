@@ -216,8 +216,7 @@ public class AdminDashboard extends JPanel {
         jobsModel = new DefaultTableModel(columns, 0) {
 
             @Override
-            public boolean isCellEditable(
-                    int row, int column) {
+            public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
@@ -316,13 +315,16 @@ public class AdminDashboard extends JPanel {
         studentsModel = new DefaultTableModel(columns, 0) {
 
             @Override
-            public boolean isCellEditable(
-                    int row, int column) {
+            public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
 
         studentsTable = new JTable(studentsModel);
+
+        studentsTable.setSelectionMode(
+            ListSelectionModel.SINGLE_SELECTION
+        );
 
         studentsSorter =
             new TableRowSorter<>(studentsModel);
@@ -359,11 +361,22 @@ public class AdminDashboard extends JPanel {
             BorderLayout.CENTER
         );
 
+        // Student action buttons
         JButton refreshButton = new JButton(
             "Refresh Students"
         );
 
-        panel.add(refreshButton, BorderLayout.SOUTH);
+        // NEW: Administrator can grant additional GPU minutes
+        JButton grantButton = new JButton(
+            "Grant Extra Time"
+        );
+
+        JPanel buttonsPanel = new JPanel();
+
+        buttonsPanel.add(refreshButton);
+        buttonsPanel.add(grantButton);
+
+        panel.add(buttonsPanel, BorderLayout.SOUTH);
 
         // Search whenever text changes
         studentSearchField.getDocument().addDocumentListener(
@@ -390,7 +403,172 @@ public class AdminDashboard extends JPanel {
             e -> refreshStudents()
         );
 
+        // NEW: Open the Grant Extra Time dialog
+        grantButton.addActionListener(
+            e -> grantExtraTime()
+        );
+
         return panel;
+    }
+
+    // NEW: Grant additional GPU minutes to a selected student
+    private void grantExtraTime() {
+
+        // Require the administrator to select a student
+        int selectedRow = studentsTable.getSelectedRow();
+
+        if (selectedRow == -1) {
+            Dialog.showError(
+                this,
+                "Please select a student first."
+            );
+            return;
+        }
+
+        // Convert the displayed row to the actual model row
+        // This is necessary because the table supports sorting
+        int modelRow =
+            studentsTable.convertRowIndexToModel(selectedRow);
+
+        String studentId =
+            studentsModel.getValueAt(modelRow, 0).toString();
+
+        // Find the original registered Student object
+        Student selectedStudent = null;
+
+        for (Student student : scheduler.getStudents()) {
+
+            if (student.getStudentId().equals(studentId)) {
+                selectedStudent = student;
+                break;
+            }
+        }
+
+        if (selectedStudent == null) {
+            Dialog.showError(this, "Student not found.");
+            return;
+        }
+
+        // Ask the administrator for additional minutes
+        String minutesInput = JOptionPane.showInputDialog(
+            this,
+            "Enter additional GPU minutes for student "
+                + studentId + ":",
+            "Grant Extra Time",
+            JOptionPane.QUESTION_MESSAGE
+        );
+
+        // Cancel closes the dialog without changing anything
+        if (minutesInput == null) {
+            return;
+        }
+
+        minutesInput = minutesInput.trim();
+
+        if (minutesInput.isEmpty()) {
+            Dialog.showError(
+                this,
+                "Please enter the number of minutes."
+            );
+            return;
+        }
+
+        int minutes;
+
+        try {
+            // Accept positive whole numbers only
+            minutes = Integer.parseInt(minutesInput);
+
+        } catch (NumberFormatException ex) {
+
+            Dialog.showError(
+                this,
+                "Minutes must be a valid whole number."
+            );
+            return;
+        }
+
+        if (minutes <= 0) {
+            Dialog.showError(
+                this,
+                "Granted minutes must be positive."
+            );
+            return;
+        }
+
+        // Ask for the reason, which must be recorded
+        String reason = JOptionPane.showInputDialog(
+            this,
+            "Enter the reason for granting "
+                + minutes + " minutes:",
+            "Grant Reason",
+            JOptionPane.QUESTION_MESSAGE
+        );
+
+        if (reason == null) {
+            return;
+        }
+
+        reason = reason.trim();
+
+        if (reason.isEmpty()) {
+            Dialog.showError(
+                this,
+                "A reason is required."
+            );
+            return;
+        }
+
+        // Confirm the administrator's decision
+        int choice = JOptionPane.showConfirmDialog(
+            this,
+            "Grant " + minutes
+                + " GPU minutes to student "
+                + studentId
+                + "?\nReason: " + reason,
+            "Confirm Time Grant",
+            JOptionPane.YES_NO_OPTION
+        );
+
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+
+            // Use existing Administrator business logic
+            administrator.grantTime(
+                selectedStudent,
+                minutes,
+                reason
+            );
+
+            // Save the updated allowance and grant record
+            // before displaying a success message
+            saveDashboardChanges();
+
+            // Refresh all administrator tables
+            refreshAll();
+
+            JOptionPane.showMessageDialog(
+                this,
+                minutes + " GPU minutes granted to student "
+                    + studentId + " successfully.",
+                "Grant Successful",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (RuntimeException ex) {
+
+            refreshAll();
+
+            Dialog.showError(
+                this,
+                ex.getMessage() == null
+                    ? "Could not grant extra time."
+                    : ex.getMessage()
+            );
+        }
     }
 
     // Filters students by ID or name
@@ -446,8 +624,7 @@ public class AdminDashboard extends JPanel {
         requestsModel = new DefaultTableModel(columns, 0) {
 
             @Override
-            public boolean isCellEditable(
-                    int row, int column) {
+            public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
