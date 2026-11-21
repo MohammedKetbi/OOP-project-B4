@@ -12,6 +12,7 @@ import ui.StudentPanel;
 import ui.AdminDashboard;
 
 import javax.swing.*;
+import java.awt.Window;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
@@ -23,6 +24,9 @@ public class project {
 
     // Handles saving and loading data.txt
     private static DataStore dataStore;
+
+    // Prevents further changes while recovery is pending
+    private static boolean recoveryPending = false;
 
     // Starting point of the application
     public static void main(String[] args) {
@@ -39,11 +43,8 @@ public class project {
 
                 // First run requires clock setup
                 if (!state.isClockSet()) {
-
                     openClockSetup();
-
                 } else {
-
                     openLogin();
                 }
 
@@ -71,13 +72,15 @@ public class project {
                         LocalDateTime selectedTime)
                         throws Exception {
 
+                    checkRecovery();
+
                     // Initialize shared clock and scheduler
                     state.initializeClock(selectedTime);
 
                     // Save initial application state
-                    dataStore.save(state);
+                    saveOrRecover();
 
-                    // Open login after setup
+                    // Open login only after successful saving
                     openLogin();
                 }
             }
@@ -96,6 +99,8 @@ public class project {
                 public void signIn(
                         String username,
                         String password) {
+
+                    checkRecovery();
 
                     username = username.trim();
 
@@ -148,6 +153,8 @@ public class project {
                         String phone,
                         String password) {
 
+                    checkRecovery();
+
                     try {
 
                         int id = Integer.parseInt(
@@ -166,20 +173,13 @@ public class project {
                         // Add request to shared state
                         state.addRequest(request);
 
-                        // Save registration
-                        dataStore.save(state);
+                        // Save registration with recovery protection
+                        saveOrRecover();
 
                     } catch (NumberFormatException ex) {
 
                         throw new IllegalArgumentException(
                             "University ID must contain valid digits."
-                        );
-
-                    } catch (IOException ex) {
-
-                        throw new IllegalStateException(
-                            "Could not save registration: "
-                                + ex.getMessage()
                         );
                     }
                 }
@@ -192,6 +192,8 @@ public class project {
     // Opens the administrator dashboard
     private static void openAdminDashboard() {
 
+        checkRecovery();
+
         JFrame frame = new JFrame(
             "GPU Utilization Management - Administrator"
         );
@@ -203,26 +205,13 @@ public class project {
         frame.setSize(1200, 750);
         frame.setLocationRelativeTo(null);
 
-        // Use shared state and save callback
+        // Use shared state and protected save callback
         AdminDashboard dashboard = new AdminDashboard(
             state.getAdministrator(),
             state.getScheduler(),
             state.getClock(),
             state,
-            () -> {
-                try {
-
-                    dataStore.save(state);
-
-                } catch (IOException ex) {
-
-                    throw new IllegalStateException(
-                        "Could not save changes: "
-                            + ex.getMessage(),
-                        ex
-                    );
-                }
-            }
+            () -> saveOrRecover()
         );
 
         frame.add(dashboard);
@@ -231,6 +220,8 @@ public class project {
 
     // Opens the student dashboard
     private static void openStudentPanel(Student student) {
+
+        checkRecovery();
 
         JFrame frame = new JFrame(
             "GPU Utilization Management - Student"
@@ -243,30 +234,120 @@ public class project {
         frame.setSize(1200, 750);
         frame.setLocationRelativeTo(null);
 
-        // Pass shared state and saving callback
+        // Pass shared state and protected save callback
         StudentPanel panel = new StudentPanel(
             student,
             state.getScheduler(),
             state.getClock(),
             state,
-            () -> {
-                try {
-
-                    dataStore.save(state);
-
-                } catch (IOException ex) {
-
-                    throw new IllegalStateException(
-                        "Could not save student changes: "
-                            + ex.getMessage(),
-                        ex
-                    );
-                }
-            }
+            () -> saveOrRecover()
         );
 
         frame.add(panel);
         frame.setVisible(true);
+    }
+
+    // Prevent operations while recovery is pending
+    private static void checkRecovery() {
+
+        if (recoveryPending) {
+            throw new IllegalStateException(
+                "Storage recovery is in progress."
+            );
+        }
+    }
+
+    // Save the application and schedule recovery if saving fails
+    private static void saveOrRecover() {
+
+        checkRecovery();
+
+        try {
+
+            // Save the updated shared application state
+            dataStore.save(state);
+
+        } catch (IOException saveError) {
+
+            // Prevent another save while recovery is pending
+            recoveryPending = true;
+
+            // Schedule recovery after the current GUI event
+            // finishes, avoiding stale references in open screens
+            SwingUtilities.invokeLater(() -> {
+                recoverSavedState(saveError);
+            });
+
+            // Stop the current action from reporting success
+            throw new IllegalStateException(
+                "Saving failed. Recovery will now begin.",
+                saveError
+            );
+        }
+    }
+
+    // Reload the saved state and reopen the application safely
+    private static void recoverSavedState(
+            IOException saveError) {
+
+        // Disable all existing application windows
+        for (Window window : Window.getWindows()) {
+            window.setEnabled(false);
+        }
+
+        try {
+
+            // Reload the actual saved file
+            // This also handles cases where replacement succeeded
+            // before an error was reported
+            AppState restoredState = dataStore.load();
+
+            // Close old windows holding outdated object references
+            for (Window window : Window.getWindows()) {
+                window.dispose();
+            }
+
+            // Replace the shared state only after loading succeeds
+            state = restoredState;
+
+            JOptionPane.showMessageDialog(
+                null,
+                "A save operation failed.\n"
+                    + "The application has reloaded the saved data.\n"
+                    + "Please sign in again.\n\n"
+                    + "The latest action may not have been saved.\n\n"
+                    + saveError.getMessage(),
+                "Storage Recovery",
+                JOptionPane.WARNING_MESSAGE
+            );
+
+            // Recovery is complete
+            recoveryPending = false;
+
+            // Open the appropriate screen with fresh objects
+            if (state.isClockSet()) {
+                openLogin();
+            } else {
+                openClockSetup();
+            }
+
+        } catch (IOException recoveryError) {
+
+            // Do not continue using potentially inconsistent data
+            JOptionPane.showMessageDialog(
+                null,
+                "Saving failed and the saved state "
+                    + "could not be reloaded.\n\n"
+                    + recoveryError.getMessage()
+                    + "\n\nClose and investigate the storage file "
+                    + "before restarting.",
+                "Recovery Failed",
+                JOptionPane.ERROR_MESSAGE
+            );
+
+            // Remain blocked rather than using stale state
+            // The application can be restarted after fixing storage
+        }
     }
 
     // Saves the current application state
@@ -274,14 +355,13 @@ public class project {
 
         try {
 
-            dataStore.save(state);
+            saveOrRecover();
 
-        } catch (IOException ex) {
+        } catch (IllegalStateException ex) {
 
             JOptionPane.showMessageDialog(
                 null,
-                "Failed to save application data:\n"
-                    + ex.getMessage(),
+                ex.getMessage(),
                 "Save Error",
                 JOptionPane.ERROR_MESSAGE
             );
