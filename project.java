@@ -6,10 +6,8 @@ import model.AccessRequest;
 import model.Administrator;
 import model.Student;
 
-import ui.ClockSetUpScreen3;
-import ui.LoginFrame;
-import ui.StudentPanel;
-import ui.AdminDashboard;
+import UI.*;
+
 
 import javax.swing.*;
 import java.io.IOException;
@@ -271,7 +269,6 @@ public class project {
 
     // Saves the current application state
     public static void saveState() {
-
         try {
 
             dataStore.save(state);
