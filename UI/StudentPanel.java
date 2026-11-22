@@ -32,6 +32,8 @@ public class StudentPanel extends JPanel {
     // Shared application state and saving callback
     private AppState appState;
     private Runnable saveChanges;
+    private Runnable logoutAction;
+    private final JButton logoutButton = new JButton("Log out");
 
     // GPU allowance labels
     private JLabel allocatedLabel;
@@ -76,6 +78,11 @@ public class StudentPanel extends JPanel {
 
         tabs.addTab("Home and Submit", createHomePanel());
         tabs.addTab("My Jobs", createJobsPanel());
+        logoutButton.setEnabled(false);
+        JPanel logoutPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        logoutPanel.add(logoutButton);
+        add(logoutPanel, BorderLayout.NORTH);
+        logoutButton.addActionListener(e -> logout());
 
         add(tabs, BorderLayout.CENTER);
 
@@ -114,6 +121,30 @@ public class StudentPanel extends JPanel {
 
         this.appState = appState;
         this.saveChanges = saveChanges;
+    }
+
+
+    public void setLogoutAction(Runnable logoutAction) {
+        if (logoutAction == null) {
+            throw new IllegalArgumentException("Logout action is required.");
+        }
+        this.logoutAction = logoutAction;
+        logoutButton.setEnabled(true);
+    }
+
+    private void logout() {
+        if (logoutAction == null) {
+            return;
+        }
+        logoutButton.setEnabled(false);
+        try {
+            saveStudentChanges();
+            logoutAction.run();
+        } catch (RuntimeException ex) {
+            Dialog.showError(this, "Could not log out: " + ex.getMessage());
+        } finally {
+            logoutButton.setEnabled(true);
+        }
     }
 
     // Saves changes through the application controller
