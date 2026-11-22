@@ -61,8 +61,8 @@ public class project {
     // Opens clock setup on the first run
     private static void openClockSetup() {
 
-        ClockSetUpScreen3 setup = new ClockSetUpScreen3(
-            new ClockSetUpScreen3.ClockStartHandler() {
+        ClockSetUpScreen setup = new ClockSetUpScreen(
+            new ClockSetUpScreen.ClockStartHandler() {
 
                 @Override
                 public void startClock(

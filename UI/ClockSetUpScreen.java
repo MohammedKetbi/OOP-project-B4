@@ -6,7 +6,7 @@ import java.util.Calendar;
 import java.util.Date;
 import javax.swing.*;
 
-public class ClockSetUpScreen3 extends JFrame {
+public class ClockSetUpScreen extends JFrame {
 
     private final JSpinner datePicker;
     private final JSpinner timePicker;
@@ -27,7 +27,7 @@ public class ClockSetUpScreen3 extends JFrame {
         void startClock(LocalDateTime selectedTime) throws Exception;
     }
 
-    public ClockSetUpScreen3(ClockStartHandler handler) {
+    public ClockSetUpScreen(ClockStartHandler handler) {
 
         if (handler == null) {
             throw new IllegalArgumentException(

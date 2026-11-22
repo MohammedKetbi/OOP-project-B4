@@ -12,8 +12,8 @@ public class ClockSetupTestDriver {
         // Swing windows should be created on Swing's event thread.
         SwingUtilities.invokeLater(() -> {
 
-            ClockSetUpScreen3 screen =
-                new ClockSetUpScreen3(selectedTime -> {
+            ClockSetUpScreen screen =
+                new ClockSetUpScreen(selectedTime -> {
 
                     // Test only: create a new clock from this selection.
                     // Nothing is saved or loaded between runs.
