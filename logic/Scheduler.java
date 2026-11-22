@@ -1,14 +1,17 @@
+package logic;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import model.Administrator;
+import model.GPU;
+import model.Job;
 import model.Student;
 import model.TimeAllowance;
 import model.User;
 
 public class Scheduler {
-
     // Contains only jobs waiting for a GPU.
     private final List<Job> queue = new ArrayList<>();
 
@@ -23,7 +26,7 @@ public class Scheduler {
     private final SimulationClock simClock;
 
     // Starting time for calculating utilization during this session.
-    private final LocalDateTime initialTime;
+    private LocalDateTime initialTime;
 
     // The completed Administrator registers itself in its constructor.
     private Administrator administrator;
@@ -512,4 +515,144 @@ public class Scheduler {
     public GPU[] getGpus() {
         return gpus.clone();
     }
+
+    // STORAGE: read-only views used by DataStore.
+    public List<Student> getStudents() {
+        List<Student> result = new ArrayList<>(students.values());
+        result.sort(Comparator.comparing(Student::getStudentId));
+        return Collections.unmodifiableList(result);
+    }
+    public LocalDateTime getInitialTime() { return initialTime; }
+    public SimulationClock getClock() { return simClock; }
+    public Administrator getAdministrator() { return administrator; }
+
+    // STORAGE: build a NEW scheduler, then validate before returning it.
+    // No submit(), dispatch or allowance settlement is performed during load.
+    public static Scheduler restore(SimulationClock clock, LocalDateTime initial,
+            List<Student> savedStudents, List<Job> savedJobs,
+            Map<Integer, String> assignments) {
+        if (clock == null || clock.getTime() == null || initial == null || assignments == null || assignments.size() != 4 || savedStudents == null || savedJobs == null) {
+            throw new IllegalArgumentException("Invalid saved scheduler data.");
+        }
+        LocalDateTime now = clock.getTime();
+        if (initial.isAfter(now)) {throw new IllegalArgumentException("Initial time cannot be after the current simulation.");}
+
+        Scheduler scheduler = new Scheduler(clock,
+            new GPU[]{new GPU(1), new GPU(2), new GPU(3), new GPU(4)});
+        scheduler.initialTime = initial;
+        for (Student student : savedStudents) scheduler.registerStudent(student);
+        Map<String, Job> byId = new HashMap<>();
+        Map<String, Long> reserved = new HashMap<>();
+        Map<String, Long> used = new HashMap<>();
+        for (Job job : savedJobs) {
+            if (job == null || job.getJobId() == null ||
+                !job.getJobId().matches("J[0-9]+") || byId.put(job.getJobId(), job) != null) {
+                throw new IllegalArgumentException("Missing or duplicate saved job ID.");
+            }
+            Student owner = scheduler.ownerOf(job);
+            LocalDateTime sub = job.getSubmissionTime();
+            LocalDateTime start = job.getStartTime();
+            LocalDateTime end = job.getFinishTime();
+            LocalDateTime cancel = job.getCancellationTime();
+            if (sub == null || sub.isBefore(initial) || sub.isAfter(now) ||
+                (start != null && (start.isBefore(sub) || start.isAfter(now)))) {
+                throw new IllegalArgumentException("Invalid saved job timeline: " + job.getJobId());
+            }
+            String status = job.getStatus();
+            boolean active = "Queued".equals(status) || "Running".equals(status);
+            if ("Queued".equals(status)) {
+                if (start != null || end != null || job.getAssignedGpuId() != 0) {
+                    throw new IllegalArgumentException("Queued job has execution fields.");
+                }
+                scheduler.queue.add(job);
+            } else if ("Running".equals(status)) {
+                if (start == null || end != null ||
+                    !start.plusMinutes(job.getEstimatedDuration()).isAfter(now)) {
+                    throw new IllegalArgumentException("Invalid running job.");
+                }
+            } else if ("Completed".equals(status)) {
+                if (start == null || end == null || end.isAfter(now) ||
+                    !end.equals(start.plusMinutes(job.getEstimatedDuration()))) {
+                    throw new IllegalArgumentException("Invalid completed job.");
+                }
+            } else if ("Cancelled".equals(status)) {
+                if (cancel == null || cancel.isBefore(sub) || cancel.isAfter(now) ||
+                    job.getCancelledBy() == null || job.getCancelledReason() == null ||
+                    job.getCancelledReason().trim().isEmpty() ||
+                    !("admin".equals(job.getCancelledBy()) ||
+                      owner.getStudentId().equals(job.getCancelledBy()))) {
+                    throw new IllegalArgumentException("Invalid cancellation record.");
+                }
+                if (start == null) {
+                    if (end != null || job.getAssignedGpuId() != 0) {
+                        throw new IllegalArgumentException("Queued cancellation has runtime fields.");
+                    }
+                } else if (!cancel.equals(end) || cancel.isBefore(start) ||
+                    cancel.isAfter(start.plusMinutes(job.getEstimatedDuration()))) {
+                    throw new IllegalArgumentException("Invalid cancelled runtime.");
+                }
+            } else throw new IllegalArgumentException("Unknown saved job status.");
+            if (!"Cancelled".equals(status) && (cancel != null ||
+                job.getCancelledBy() != null || job.getCancelledReason() != null)) {
+                throw new IllegalArgumentException("Unexpected cancellation fields.");
+            }
+            if (start != null && (job.getAssignedGpuId() < 1 || job.getAssignedGpuId() > 4)) {
+                throw new IllegalArgumentException("Invalid execution GPU ID.");
+            }
+            String id = owner.getStudentId();
+            if (active) reserved.put(id, reserved.getOrDefault(id, 0L) + job.getEstimatedDuration());
+            else used.put(id, used.getOrDefault(id, 0L) + job.getChargeableMinutes());
+            scheduler.allJobs.add(job);
+        }
+        Set<Job> assigned = new HashSet<>();
+        for (GPU gpu : scheduler.gpus) {
+            if (!assignments.containsKey(gpu.getId())) {
+                throw new IllegalArgumentException("Missing saved GPU.");
+            }
+            String id = assignments.get(gpu.getId());
+            if (id != null) {
+                Job job = byId.get(id);
+                if (job == null || !assigned.add(job)) {
+                    throw new IllegalArgumentException("Unknown or duplicated GPU job.");
+                }
+                gpu.restoreCurrentJob(job);
+            }
+        }
+        for (Job job : savedJobs) {
+            if ("Running".equals(job.getStatus()) && !assigned.contains(job)) {
+                throw new IllegalArgumentException("Running job has no GPU.");
+            }
+        }
+        for (Student student : savedStudents) {
+            TimeAllowance allowance = student.getAllowance();
+            if (reserved.getOrDefault(student.getStudentId(), 0L) != allowance.getReserved() ||
+                used.getOrDefault(student.getStudentId(), 0L) != allowance.getUsed()) {
+                throw new IllegalArgumentException("Saved allowance disagrees with job history: " + student.getStudentId());
+            }
+        }
+        // A single GPU cannot have executed two jobs at overlapping times.
+        // Touching endpoints are valid: one job may start as another finishes.
+        for (int i = 0; i < savedJobs.size(); i++) {
+            Job a = savedJobs.get(i);
+            if (a.getStartTime() == null) continue;
+            LocalDateTime aEnd = a.getFinishTime() == null ? now : a.getFinishTime();
+            for (int j = i + 1; j < savedJobs.size(); j++) {
+                Job b = savedJobs.get(j);
+                if (b.getStartTime() == null || a.getAssignedGpuId() != b.getAssignedGpuId()) continue;
+                LocalDateTime bEnd = b.getFinishTime() == null ? now : b.getFinishTime();
+                if (a.getStartTime().isBefore(aEnd) && b.getStartTime().isBefore(bEnd) &&
+                    a.getStartTime().isBefore(bEnd) && b.getStartTime().isBefore(aEnd)) {
+                    throw new IllegalArgumentException("Saved GPU execution intervals overlap.");
+                }
+            }
+        }
+        scheduler.sortQueue();
+        for (GPU gpu : scheduler.gpus) {
+            if (gpu.isFree() && !scheduler.queue.isEmpty()) {
+                throw new IllegalArgumentException("Waiting jobs exist while a GPU is free.");
+            }
+        }
+        return scheduler;
+    }
+
 }

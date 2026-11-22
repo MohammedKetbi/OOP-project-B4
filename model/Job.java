@@ -1,3 +1,5 @@
+package model;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -68,6 +70,14 @@ public class Job {
     public Job(String jobId, String studentId, String title,
         String applicationName, String description, String taskSize,
         LocalDateTime submissionTime){
+            if (jobId == null || !jobId.matches("J[0-9]+")){throw new IllegalArgumentException("Job ID must be like J101");}
+            checkText(studentId, "Student ID");
+            checkText(title, "Title");
+            checkText(applicationName, "Application name");
+            checkText(description, "Description");
+            checkText(taskSize, "Task size");
+            if (submissionTime == null) {throw new IllegalArgumentException("Submission time is required");}
+            
             this.jobId = jobId;
             this.studentId = studentId;
             this.title = title;
@@ -97,9 +107,8 @@ public class Job {
         }
 
     public int getElapsedRuntime(LocalDateTime currenTime){
-        checkTime(currenTime, startTime);
         if (startTime == null) return 0;
-        checkTime(currenTime, submissionTime);
+        checkTime(currenTime, startTime);
         LocalDateTime endTime = currenTime;
         if (finishTime != null) {
             checkTime(currenTime, finishTime);
@@ -137,7 +146,7 @@ public class Job {
 
 
     public void checkText(String text, String fieldName) {
-        if (text == null || text.trim().isEmpty()) throw new IllegalArgumentException(fieldName + "cannot be empty");
+        if (text == null || text.trim().isEmpty()) throw new IllegalArgumentException(fieldName + " cannot be empty.");
 
     }
 
@@ -148,7 +157,7 @@ public class Job {
     }
     public String formatTime(LocalDateTime time){
         if (time == null) return "Not set";
-       DateTimeFormatter format =  DateTimeFormatter.ofPattern("dd//MM//yyyy HH:mm");
+       DateTimeFormatter format =  DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         return time.format(format);
     }
     public String getJobId() {
@@ -202,11 +211,31 @@ public class Job {
 
     @Override 
     public String toString(){
-        return "Job ID: " + jobId + ", Student ID: " + studentId + ", Title: " + title +  ", Application: " + applicationName + ", Application " + applicationName +
+        return "Job ID: " + jobId + ", Student ID: " + studentId + ", Title: " + title +  ", Application: " + applicationName  +
         ", Description: " + description + ", Task size: " + taskSize + ", Workload units: " + workloadUnits + ", Duration: " + estimatedDuration + " minutes" + ", Status: " + status +
         ", GPU ID: " + assignedGpuId + ", Submitted: " + formatTime(submissionTime) + ", Started: " + formatTime(startTime) + ", Finished: " + formatTime(finishTime) + ", Cancelled: " + formatTime(cancellationTime) + 
         ", Cancelled by:" + cancelledBy + ", Cancellation reason: " + cancelledReason;
     }
         
+
+
+    // STORAGE: rebuild saved fields without start(), complete() or cancel().
+    // Scheduler.restore() validates timeline, ownership, balances and assignments.
+    public static Job restore(String jobId, String studentId, String title,
+            String applicationName, String description, String taskSize,
+            LocalDateTime submitted, String status, int gpuId,
+            LocalDateTime started, LocalDateTime finished,
+            LocalDateTime cancelled, String by, String reason) {
+        Job job = new Job(jobId, studentId, title, applicationName, description,
+                          taskSize, submitted);
+        job.status = status;
+        job.assignedGpuId = gpuId;
+        job.startTime = started;
+        job.finishTime = finished;
+        job.cancellationTime = cancelled;
+        job.cancelledBy = by;
+        job.cancelledReason = reason;
+        return job;
+    }
 
 }
