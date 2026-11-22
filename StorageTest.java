@@ -7,7 +7,7 @@ import logic.*;
 import model.*;
 import storage.DataStore;
 
-/** Automated round-trip and invalid-file tests. Does NOT touch your data.txt. */
+// Automated round-trip and invalid-file tests. 
 public class StorageTest {
     private static int checks;
     private static Path directory;
