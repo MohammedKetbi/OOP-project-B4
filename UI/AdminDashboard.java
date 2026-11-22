@@ -33,6 +33,8 @@ public class AdminDashboard extends JPanel {
     // Shared registration state and saving callback
     private AppState appState;
     private Runnable saveChanges;
+    private Runnable logoutAction;
+    private JButton logoutButton;
 
     // Dashboard information
     private JLabel clockLabel;
@@ -87,9 +89,13 @@ public class AdminDashboard extends JPanel {
 
         tabs.addTab("Dashboard", createDashboardPanel());
         tabs.addTab("Student Search", createStudentSearchPanel());
-
         add(tabs, BorderLayout.CENTER);
-
+        logoutButton = new JButton("Log out");
+        logoutButton.setEnabled(false);
+        JPanel logoutPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        logoutPanel.add(logoutButton);
+        add(logoutPanel, BorderLayout.NORTH);
+        logoutButton.addActionListener(e -> logout());
         // Refresh when switching tabs
         tabs.addChangeListener(e -> refreshAll());
 
@@ -124,21 +130,32 @@ public class AdminDashboard extends JPanel {
 
         this.appState = appState;
         this.saveChanges = saveChanges;
-
-        // Add Registration Requests tab
         JTabbedPane tabs = (JTabbedPane) getComponent(0);
-
-        tabs.addTab(
-            "Registration Requests",
-            createRequestsPanel()
-        );
-
+        tabs.addTab("Registration Requests", createRequestsPanel());
         refreshRequests();
     }
-
-    // Saves changes through the application controller
+    public void setLogoutAction(Runnable logoutAction) {
+        if (logoutAction == null) {
+            throw new IllegalArgumentException("Logout action is required.");
+        }
+        this.logoutAction = logoutAction;
+        logoutButton.setEnabled(true);
+    }
+    private void logout() {
+        if (logoutAction == null) {
+            return;
+        }
+        logoutButton.setEnabled(false);
+        try {
+            saveDashboardChanges();
+            logoutAction.run();
+        } catch (RuntimeException ex) {
+            Dialog.showError(this, "Could not log out: " + ex.getMessage());
+        } finally {
+            logoutButton.setEnabled(true);
+        }
+    }
     private void saveDashboardChanges() {
-
         if (saveChanges != null) {
             saveChanges.run();
         }
