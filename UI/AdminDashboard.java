@@ -380,7 +380,14 @@ public class AdminDashboard extends JPanel {
             "Refresh Students"
         );
 
-        panel.add(refreshButton, BorderLayout.SOUTH);
+        // Keep refresh and time grants together at the bottom of Student Search.
+        JButton grantTimeButton = new JButton("Grant Time");
+        JPanel studentActions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        studentActions.add(refreshButton);
+        studentActions.add(grantTimeButton);
+        panel.add(studentActions, BorderLayout.SOUTH);
+        studentsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        grantTimeButton.addActionListener(e -> grantTimeToSelectedStudent());
 
         // Search whenever text changes
         studentSearchField.getDocument().addDocumentListener(
@@ -408,6 +415,120 @@ public class AdminDashboard extends JPanel {
         );
 
         return panel;
+    }
+
+    // Resolve the selected VIEW row to its MODEL row. This remains correct
+    // when the administrator filters the table or sorts a column.
+    private Student getSelectedStudentForGrant() {
+        int viewRow = studentsTable.getSelectedRow();
+        if (viewRow < 0) {
+            throw new IllegalArgumentException("Please select a student first.");
+        }
+        int modelRow = studentsTable.convertRowIndexToModel(viewRow);
+        String studentId = studentsModel.getValueAt(modelRow, 0).toString();
+        for (Student student : scheduler.getStudents()) {
+            if (student.getStudentId().equals(studentId)) {
+                return student;
+            }
+        }
+        throw new IllegalArgumentException("The selected student could not be found.");
+    }
+
+    // Validate before changing the allowance. Reject decimals, zero, negative
+    // values and numbers that cannot be represented as an int.
+    private int readGrantMinutes(String text) {
+        if (text == null || !text.trim().matches("[0-9]+")) {
+            throw new IllegalArgumentException("Enter a positive whole number of minutes.");
+        }
+        try {
+            int minutes = Integer.parseInt(text.trim());
+            if (minutes <= 0) {
+                throw new IllegalArgumentException("Minutes must be greater than zero.");
+            }
+            return minutes;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("The number of minutes is too large.");
+        }
+    }
+
+    // Use the existing domain method: it updates allocated minutes and records
+    // the student, administrator, simulation time and reason in grant history.
+    private void applyTimeGrant(Student student, int minutes, String reason) {
+        if (student == null || !scheduler.getStudents().contains(student)) {
+            throw new IllegalArgumentException("A registered student is required.");
+        }
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new IllegalArgumentException("A reason is required.");
+        }
+        administrator.grantTime(student, minutes, reason.trim());
+    }
+
+    private void grantTimeToSelectedStudent() {
+        Student selectedStudent;
+        try {
+            selectedStudent = getSelectedStudentForGrant();
+        } catch (IllegalArgumentException ex) {
+            Dialog.showError(this, ex.getMessage());
+            return;
+        }
+
+        JTextField minutesField = new JTextField(12);
+        JTextArea reasonField = new JTextArea(4, 28);
+        reasonField.setLineWrap(true);
+        reasonField.setWrapStyleWord(true);
+
+        JPanel form = new JPanel(new BorderLayout(8, 8));
+        JPanel details = new JPanel(new GridLayout(0, 1, 4, 4));
+        details.add(new JLabel("Student: " + selectedStudent.getName()
+            + " (" + selectedStudent.getStudentId() + ")"));
+        details.add(new JLabel("Extra GPU minutes:"));
+        details.add(minutesField);
+        details.add(new JLabel("Reason (required):"));
+        form.add(details, BorderLayout.NORTH);
+        form.add(new JScrollPane(reasonField), BorderLayout.CENTER);
+
+        while (true) {
+            int choice = JOptionPane.showConfirmDialog(
+                this, form, "Grant Extra GPU Time",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
+            );
+            if (choice != JOptionPane.OK_OPTION) {
+                return; // Cancelling the dialog changes nothing.
+            }
+
+            int minutes;
+            try {
+                minutes = readGrantMinutes(minutesField.getText());
+                applyTimeGrant(selectedStudent, minutes, reasonField.getText());
+            } catch (RuntimeException ex) {
+                Dialog.showError(this, ex.getMessage());
+                continue; // Keep the inputs so the administrator can correct them.
+            }
+
+            // The domain change succeeded. Refresh balances, then save through
+            // the SAME callback used by approvals, cancellations and clock advances.
+            refreshAll();
+            try {
+                saveDashboardChanges();
+            } catch (RuntimeException ex) {
+                // Do not reopen the grant form: submitting it again would add
+                // the same minutes a second time. The in-memory grant remains.
+                Dialog.showError(this,
+                    "The " + minutes + " minutes were added in this session, "
+                    + "but saving failed. Do not grant them again. Retry saving "
+                    + "before closing the application.\n" + ex.getMessage());
+                return;
+            }
+
+            JOptionPane.showMessageDialog(
+                this,
+                minutes + " GPU minutes granted to " + selectedStudent.getName()
+                    + ".\nAllocated: " + selectedStudent.getAllowance().getAllocated()
+                    + "\nAvailable: " + selectedStudent.getAllowance().available(),
+                "Time Granted", JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
     }
 
     // Filters students by ID or name

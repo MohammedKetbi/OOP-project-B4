@@ -223,6 +223,14 @@ public class project {
             }
         );
 
+        // Enable Log out and connect it to navigation in this launcher.
+        // AdminDashboard saves through its existing callback before this runs.
+        // Keep the shared state: logging out must not reset jobs or the clock.
+        dashboard.setLogoutAction(() -> {
+            openLogin();
+            frame.dispose();
+        });
+
         frame.add(dashboard);
         frame.setVisible(true);
     }
@@ -262,6 +270,14 @@ public class project {
                 }
             }
         );
+
+        // StudentPanel saves before invoking this action.
+        // A fresh login window has empty credentials; dispose the old dashboard
+        // so the logged-out student's screen cannot still be used.
+        panel.setLogoutAction(() -> {
+            openLogin();
+            frame.dispose();
+        });
 
         frame.add(panel);
         frame.setVisible(true);
